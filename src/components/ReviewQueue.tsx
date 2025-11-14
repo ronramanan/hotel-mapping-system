@@ -20,7 +20,7 @@ const ReviewQueue: React.FC = () => {
   const loadPendingReviews = async () => {
     try {
       setLoading(true);
-      const reviews = await getPendingReviews(20);
+      const reviews = await getPendingReviews();
       setPendingReviews(reviews);
       if (reviews.length > 0 && !currentReview) {
         loadReviewDetails(reviews[0].id);
