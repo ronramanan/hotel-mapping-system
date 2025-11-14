@@ -4,7 +4,7 @@ import {
   getPotentialMatches,
   manualMapHotel,
   createMasterAndMap,
-} from '../services/hotelMappingService';
+} from '../services/apiService';
 
 const ReviewQueue: React.FC = () => {
   const [pendingReviews, setPendingReviews] = useState<any[]>([]);
