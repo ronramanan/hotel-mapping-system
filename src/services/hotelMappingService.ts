@@ -1,4 +1,4 @@
-// API Service for Hotel Mapping Operations
+// API Service for Hotel Mapping Operations 
 import { query, getClient, MasterHotel, SupplierHotel, PotentialMatch } from '../utils/database';
 import { hotelMatcher, HotelRecord, MatchResult } from '../utils/hotelMatcher';
 
