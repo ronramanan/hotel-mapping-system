@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { importSupplierHotel } from '../services/hotelMappingService';
+import { importSupplierHotel } from '../services/apiService';
 
 const ImportHotel: React.FC = () => {
   const [formData, setFormData] = useState({
