@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getAllMasterHotels } from '../services/hotelMappingService';
+import { getAllMasterHotels } from '../services/apiService';
 
 const MasterHotels: React.FC = () => {
   const [hotels, setHotels] = useState<any[]>([]);
