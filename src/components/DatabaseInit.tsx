@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { initializeSchema, testConnection } from '../utils/database';
+import { initializeDatabase, testConnection } from '../services/apiService';
 
 const DatabaseInit: React.FC = () => {
   const [status, setStatus] = useState<'idle' | 'testing' | 'initializing' | 'success' | 'error'>('idle');
@@ -29,7 +29,7 @@ const DatabaseInit: React.FC = () => {
     setMessage('Initializing database schema...');
     
     try {
-      await initializeSchema();
+      await initializeDatabase();
       setStatus('success');
       setMessage('✅ Database initialized successfully! You can now import hotels.');
     } catch (error) {
