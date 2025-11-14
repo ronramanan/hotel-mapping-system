@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getMappingStats } from '../services/hotelMappingService';
+import { getMappingStats } from '../services/apiService';
 
 interface Stats {
   totalSuppliers: number;
