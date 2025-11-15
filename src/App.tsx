@@ -7,6 +7,7 @@ import ReviewQueue from './components/ReviewQueue';
 import MasterHotels from './components/MasterHotels';
 import DatabaseInit from './components/DatabaseInit';
 import BulkImport from './components/BulkImport';
+import ExportMappings from './components/ExportMappings';
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
               <Link to="/masters" className="nav-link">Master Hotels</Link>
               <Link to="/bulk-import-supplier">Bulk Import Suppliers</Link>
               <Link to="/bulk-import-master">Bulk Import Masters</Link>
+              <Link to="/export">Export Mappings</Link>
               <Link to="/admin" className="nav-link">Admin</Link>
             </div>
           </div>
@@ -40,6 +42,7 @@ function App() {
             <Route path="/admin" element={<DatabaseInit />} />
             <Route path="/bulk-import-supplier" element={<BulkImport type="supplier" />} />
             <Route path="/bulk-import-master" element={<BulkImport type="master" />} />
+            <Route path="/export" element={<ExportMappings />} />
           </Routes>
         </div>
 
