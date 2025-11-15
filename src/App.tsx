@@ -11,6 +11,8 @@ import BulkImport from './components/BulkImport';
 function App() {
   return (
     <Router>
+      
+      
       <div className="App">
         <nav className="navbar">
           <div className="nav-container">
@@ -22,6 +24,8 @@ function App() {
               <Link to="/import" className="nav-link">Import Hotels</Link>
               <Link to="/review" className="nav-link">Review Queue</Link>
               <Link to="/masters" className="nav-link">Master Hotels</Link>
+              <Link to="/bulk-import-supplier">Bulk Import Suppliers</Link>
+              <Link to="/bulk-import-master">Bulk Import Masters</Link>
               <Link to="/admin" className="nav-link">Admin</Link>
             </div>
           </div>
@@ -34,6 +38,8 @@ function App() {
             <Route path="/review" element={<ReviewQueue />} />
             <Route path="/masters" element={<MasterHotels />} />
             <Route path="/admin" element={<DatabaseInit />} />
+            <Route path="/bulk-import-supplier" element={<BulkImport type="supplier" />} />
+            <Route path="/bulk-import-master" element={<BulkImport type="master" />} />
           </Routes>
         </div>
 
