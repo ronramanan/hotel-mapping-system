@@ -29,15 +29,46 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
     }
   };
 
+  const parseCSVLine = (line: string): string[] => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim());
+    
+    return result;
+  };
+
   const parseCSV = (text: string): any[] => {
     const lines = text.split('\n').filter(line => line.trim());
     if (lines.length < 2) return [];
 
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    // Parse header line and remove quotes
+    const headers = parseCSVLine(lines[0]).map(h => 
+      h.replace(/^["']|["']$/g, '').trim().toLowerCase()
+    );
+    
+    console.log('Parsed headers:', headers);
+    
     const hotels = [];
 
     for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim());
+      const values = parseCSVLine(lines[i]).map(v => 
+        v.replace(/^["']|["']$/g, '').trim()
+      );
+      
       const hotel: any = {};
 
       headers.forEach((header, index) => {
@@ -53,7 +84,9 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
           case 'supplier_hotel_id':
           case 'hotel_id':
           case 'id':
-            hotel.supplierHotelId = value;
+            if (type === 'supplier') {
+              hotel.supplierHotelId = value;
+            }
             break;
           case 'address':
           case 'address_line1':
@@ -70,6 +103,7 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
           case 'postal_code':
           case 'zip':
           case 'zipcode':
+          case 'postcode':
             hotel.postalCode = value;
             break;
           case 'latitude':
@@ -174,6 +208,7 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
       }
 
       console.log(`Parsed ${hotels.length} hotels from CSV`);
+      console.log('First hotel:', hotels[0]);
 
       const uploadResult = await uploadInBatches(hotels);
       setResult(uploadResult);
@@ -292,11 +327,12 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
           <li><code>address_line1</code></li>
           <li><code>city</code></li>
           <li><code>country_code</code> (2-letter, e.g., US, GB)</li>
-          <li><code>postal_code</code></li>
+          <li><code>postal_code</code> or <code>zip</code></li>
           <li><code>latitude</code></li>
           <li><code>longitude</code></li>
           <li><code>phone_number</code></li>
         </ul>
+        <p><strong>Note:</strong> Column headers can be quoted (e.g., "hotel_name" or hotel_name)</p>
       </div>
 
       <style>{`
@@ -442,4 +478,3 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
 };
 
 export default BulkImport;
-
