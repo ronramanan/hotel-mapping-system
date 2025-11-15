@@ -6,6 +6,7 @@ import ImportHotel from './components/ImportHotel';
 import ReviewQueue from './components/ReviewQueue';
 import MasterHotels from './components/MasterHotels';
 import DatabaseInit from './components/DatabaseInit';
+import BulkImport from './components/BulkImport';
 
 function App() {
   return (
