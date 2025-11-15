@@ -13,19 +13,38 @@ interface ImportResult {
   errors: Array<{ hotel: string; error: string }>;
 }
 
+interface FileProgress {
+  filename: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  result?: ImportResult;
+  error?: string;
+}
+
 const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [supplierCode, setSupplierCode] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<ImportResult | null>(null);
+  const [currentFileIndex, setCurrentFileIndex] = useState(0);
+  const [fileProgress, setFileProgress] = useState<FileProgress[]>([]);
+  const [overallProgress, setOverallProgress] = useState(0);
   const [error, setError] = useState('');
+  const [totalResults, setTotalResults] = useState({
+    total: 0,
+    imported: 0,
+    updated: 0,
+    failed: 0
+  });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      const selectedFiles = Array.from(e.target.files);
+      setFiles(selectedFiles);
       setError('');
-      setResult(null);
+      setFileProgress(selectedFiles.map(f => ({
+        filename: f.name,
+        status: 'pending'
+      })));
+      setTotalResults({ total: 0, imported: 0, updated: 0, failed: 0 });
     }
   };
 
@@ -55,12 +74,9 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
     const lines = text.split('\n').filter(line => line.trim());
     if (lines.length < 2) return [];
 
-    // Parse header line and remove quotes
     const headers = parseCSVLine(lines[0]).map(h => 
       h.replace(/^["']|["']$/g, '').trim().toLowerCase()
     );
-    
-    console.log('Parsed headers:', headers);
     
     const hotels = [];
 
@@ -74,7 +90,6 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
       headers.forEach((header, index) => {
         const value = values[index];
         
-        // Map CSV headers to our field names
         switch (header) {
           case 'hotel_name':
           case 'hotelname':
@@ -122,12 +137,10 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
         }
       });
 
-      // Add supplier code for supplier imports
       if (type === 'supplier' && supplierCode) {
         hotel.supplierCode = supplierCode;
       }
 
-      // Only add if has required fields
       if (hotel.hotelName && (type === 'master' || hotel.supplierHotelId)) {
         hotels.push(hotel);
       }
@@ -136,8 +149,8 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
     return hotels;
   };
 
-  const uploadInBatches = async (hotels: any[]) => {
-    const batchSize = 500; // Send 500 hotels at a time
+  const uploadInBatches = async (hotels: any[]): Promise<ImportResult> => {
+    const batchSize = 500;
     const batches = Math.ceil(hotels.length / batchSize);
     let totalImported = 0;
     let totalUpdated = 0;
@@ -166,8 +179,6 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
         if (batchResult.errors) {
           allErrors.push(...batchResult.errors);
         }
-
-        setProgress(Math.round(((i + 1) / batches) * 100));
       } catch (err) {
         console.error(`Batch ${i + 1} error:`, err);
         totalFailed += batch.length;
@@ -183,9 +194,50 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
     };
   };
 
-  const handleUpload = async () => {
-    if (!file) {
-      setError('Please select a file');
+  const processFile = async (file: File, index: number) => {
+    // Update status to processing
+    setFileProgress(prev => prev.map((fp, i) => 
+      i === index ? { ...fp, status: 'processing' } : fp
+    ));
+
+    try {
+      const text = await file.text();
+      const hotels = parseCSV(text);
+
+      if (hotels.length === 0) {
+        throw new Error('No valid hotels found in CSV');
+      }
+
+      console.log(`Processing ${file.name}: ${hotels.length} hotels`);
+
+      const uploadResult = await uploadInBatches(hotels);
+      
+      // Update file progress
+      setFileProgress(prev => prev.map((fp, i) => 
+        i === index ? { ...fp, status: 'completed', result: uploadResult } : fp
+      ));
+
+      // Update total results
+      setTotalResults(prev => ({
+        total: prev.total + uploadResult.total,
+        imported: prev.imported + uploadResult.imported,
+        updated: prev.updated + uploadResult.updated,
+        failed: prev.failed + uploadResult.failed
+      }));
+
+      return uploadResult;
+    } catch (err: any) {
+      // Update file progress with error
+      setFileProgress(prev => prev.map((fp, i) => 
+        i === index ? { ...fp, status: 'failed', error: err.message } : fp
+      ));
+      throw err;
+    }
+  };
+
+  const handleUploadAll = async () => {
+    if (files.length === 0) {
+      setError('Please select at least one file');
       return;
     }
 
@@ -195,28 +247,33 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
     }
 
     setUploading(true);
-    setProgress(0);
     setError('');
-    setResult(null);
+    setOverallProgress(0);
+    setCurrentFileIndex(0);
 
     try {
-      const text = await file.text();
-      const hotels = parseCSV(text);
-
-      if (hotels.length === 0) {
-        throw new Error('No valid hotels found in CSV. Check your column headers.');
+      // Process files sequentially
+      for (let i = 0; i < files.length; i++) {
+        setCurrentFileIndex(i);
+        await processFile(files[i], i);
+        setOverallProgress(Math.round(((i + 1) / files.length) * 100));
       }
-
-      console.log(`Parsed ${hotels.length} hotels from CSV`);
-      console.log('First hotel:', hotels[0]);
-
-      const uploadResult = await uploadInBatches(hotels);
-      setResult(uploadResult);
     } catch (err: any) {
-      setError(err.message || 'Upload failed');
+      console.error('Upload error:', err);
+      // Continue processing remaining files even if one fails
     } finally {
       setUploading(false);
-      setProgress(0);
+      setOverallProgress(100);
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'pending': return '⏳';
+      case 'processing': return '🔄';
+      case 'completed': return '✅';
+      case 'failed': return '❌';
+      default: return '';
     }
   };
 
@@ -239,31 +296,71 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
         )}
 
         <div className="form-group">
-          <label>CSV File:</label>
+          <label>CSV Files (select multiple):</label>
           <input
             type="file"
             accept=".csv"
+            multiple
             onChange={handleFileChange}
             disabled={uploading}
           />
         </div>
 
-        {file && (
+        {files.length > 0 && (
           <div className="file-info">
-            Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+            <strong>Selected {files.length} file(s):</strong>
+            <ul>
+              {files.map((f, i) => (
+                <li key={i}>{f.name} ({(f.size / 1024 / 1024).toFixed(2)} MB)</li>
+              ))}
+            </ul>
+            <p><strong>Total size:</strong> {(files.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024).toFixed(2)} MB</p>
           </div>
         )}
 
-        <button onClick={handleUpload} disabled={uploading || !file}>
-          {uploading ? 'Uploading...' : 'Upload CSV'}
+        <button onClick={handleUploadAll} disabled={uploading || files.length === 0}>
+          {uploading ? `Processing file ${currentFileIndex + 1} of ${files.length}...` : '📤 Upload All Files'}
         </button>
       </div>
 
       {uploading && (
-        <div className="progress-bar">
-          <div className="progress-fill" style={{ width: `${progress}%` }}>
-            {progress}%
+        <div className="overall-progress">
+          <h3>Overall Progress: {overallProgress}%</h3>
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: `${overallProgress}%` }}>
+              {overallProgress}%
+            </div>
           </div>
+        </div>
+      )}
+
+      {fileProgress.length > 0 && (
+        <div className="files-progress">
+          <h3>File Status:</h3>
+          {fileProgress.map((fp, index) => (
+            <div key={index} className={`file-status file-status-${fp.status}`}>
+              <div className="file-status-header">
+                <span className="status-icon">{getStatusIcon(fp.status)}</span>
+                <strong>{fp.filename}</strong>
+                <span className="status-text">{fp.status}</span>
+              </div>
+              
+              {fp.result && (
+                <div className="file-result">
+                  <span>Total: {fp.result.total}</span>
+                  <span className="success">Imported: {fp.result.imported}</span>
+                  {fp.result.updated > 0 && <span className="info">Updated: {fp.result.updated}</span>}
+                  {fp.result.failed > 0 && <span className="error">Failed: {fp.result.failed}</span>}
+                </div>
+              )}
+              
+              {fp.error && (
+                <div className="file-error">
+                  Error: {fp.error}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -273,71 +370,47 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
         </div>
       )}
 
-      {result && (
+      {!uploading && totalResults.total > 0 && (
         <div className="import-result">
-          <h3>Import Complete!</h3>
+          <h3>🎉 All Files Processed!</h3>
           <div className="result-stats">
             <div className="stat">
-              <strong>Total:</strong> {result.total}
+              <strong>Total Hotels:</strong> {totalResults.total.toLocaleString()}
             </div>
             <div className="stat success">
-              <strong>Imported:</strong> {result.imported}
+              <strong>Successfully Imported:</strong> {totalResults.imported.toLocaleString()}
             </div>
-            {result.updated > 0 && (
+            {totalResults.updated > 0 && (
               <div className="stat info">
-                <strong>Updated:</strong> {result.updated}
+                <strong>Updated:</strong> {totalResults.updated.toLocaleString()}
               </div>
             )}
-            {result.failed > 0 && (
+            {totalResults.failed > 0 && (
               <div className="stat error">
-                <strong>Failed:</strong> {result.failed}
+                <strong>Failed:</strong> {totalResults.failed.toLocaleString()}
               </div>
             )}
           </div>
-
-          {result.errors && result.errors.length > 0 && (
-            <div className="error-list">
-              <h4>Errors ({result.errors.length}):</h4>
-              <ul>
-                {result.errors.slice(0, 10).map((err, idx) => (
-                  <li key={idx}>
-                    {err.hotel}: {err.error}
-                  </li>
-                ))}
-                {result.errors.length > 10 && (
-                  <li>... and {result.errors.length - 10} more</li>
-                )}
-              </ul>
-            </div>
-          )}
         </div>
       )}
 
       <div className="csv-format-info">
+        <h4>Instructions:</h4>
+        <ol>
+          <li>Select <strong>multiple CSV files</strong> at once (Ctrl+Click or Cmd+Click)</li>
+          <li>Click "Upload All Files" - they will be processed <strong>sequentially</strong></li>
+          <li>Watch the progress of each file in real-time</li>
+          <li>You can leave the page - processing continues in background</li>
+        </ol>
+        
         <h4>CSV Format:</h4>
-        <p>Required columns:</p>
-        <ul>
-          <li><code>hotel_name</code> - Hotel name</li>
-          {type === 'supplier' && (
-            <li><code>supplier_hotel_id</code> - Unique ID from supplier</li>
-          )}
-        </ul>
-        <p>Optional columns:</p>
-        <ul>
-          <li><code>address_line1</code></li>
-          <li><code>city</code></li>
-          <li><code>country_code</code> (2-letter, e.g., US, GB)</li>
-          <li><code>postal_code</code> or <code>zip</code></li>
-          <li><code>latitude</code></li>
-          <li><code>longitude</code></li>
-          <li><code>phone_number</code></li>
-        </ul>
-        <p><strong>Note:</strong> Column headers can be quoted (e.g., "hotel_name" or hotel_name)</p>
+        <p>Required: <code>hotel_name</code>{type === 'supplier' && ', '}<code>{type === 'supplier' && 'supplier_hotel_id'}</code></p>
+        <p>Optional: <code>address_line1, city, country_code, postal_code, latitude, longitude, phone_number</code></p>
       </div>
 
       <style>{`
         .bulk-import {
-          max-width: 800px;
+          max-width: 1000px;
           margin: 0 auto;
           padding: 20px;
         }
@@ -367,18 +440,32 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
         }
 
         .file-info {
+          margin: 15px 0;
+          padding: 15px;
+          background: white;
+          border-radius: 4px;
+          border: 1px solid #ddd;
+        }
+
+        .file-info ul {
           margin: 10px 0;
-          color: #666;
+          padding-left: 20px;
+        }
+
+        .file-info li {
+          margin: 5px 0;
         }
 
         button {
           background: #007bff;
           color: white;
-          padding: 10px 20px;
+          padding: 12px 24px;
           border: none;
           border-radius: 4px;
           cursor: pointer;
           font-size: 16px;
+          font-weight: bold;
+          width: 100%;
         }
 
         button:disabled {
@@ -386,13 +473,20 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
           cursor: not-allowed;
         }
 
+        .overall-progress {
+          background: #e3f2fd;
+          padding: 20px;
+          border-radius: 8px;
+          margin-bottom: 20px;
+        }
+
         .progress-bar {
           width: 100%;
-          height: 30px;
+          height: 40px;
           background: #e0e0e0;
           border-radius: 4px;
           overflow: hidden;
-          margin: 20px 0;
+          margin-top: 10px;
         }
 
         .progress-fill {
@@ -404,6 +498,95 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
           color: white;
           font-weight: bold;
           transition: width 0.3s;
+          font-size: 18px;
+        }
+
+        .files-progress {
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          margin-bottom: 20px;
+          border: 1px solid #ddd;
+        }
+
+        .file-status {
+          padding: 15px;
+          margin: 10px 0;
+          border-radius: 4px;
+          border: 2px solid #ddd;
+        }
+
+        .file-status-pending {
+          background: #f5f5f5;
+          border-color: #999;
+        }
+
+        .file-status-processing {
+          background: #fff3cd;
+          border-color: #ffc107;
+        }
+
+        .file-status-completed {
+          background: #d4edda;
+          border-color: #28a745;
+        }
+
+        .file-status-failed {
+          background: #f8d7da;
+          border-color: #dc3545;
+        }
+
+        .file-status-header {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 10px;
+        }
+
+        .status-icon {
+          font-size: 24px;
+        }
+
+        .status-text {
+          margin-left: auto;
+          text-transform: uppercase;
+          font-weight: bold;
+          font-size: 12px;
+        }
+
+        .file-result {
+          display: flex;
+          gap: 15px;
+          flex-wrap: wrap;
+          padding: 10px;
+          background: rgba(255, 255, 255, 0.5);
+          border-radius: 4px;
+        }
+
+        .file-result span {
+          padding: 5px 10px;
+          border-radius: 3px;
+          background: white;
+        }
+
+        .file-result .success {
+          background: #c8e6c9;
+          font-weight: bold;
+        }
+
+        .file-result .info {
+          background: #b3e5fc;
+        }
+
+        .file-result .error {
+          background: #ffcdd2;
+          font-weight: bold;
+        }
+
+        .file-error {
+          color: #c62828;
+          margin-top: 10px;
+          font-weight: bold;
         }
 
         .error-message {
@@ -423,7 +606,7 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
 
         .result-stats {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
           gap: 15px;
           margin: 15px 0;
         }
@@ -447,18 +630,6 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
           background: #ffcdd2;
         }
 
-        .error-list {
-          margin-top: 15px;
-          background: white;
-          padding: 15px;
-          border-radius: 4px;
-        }
-
-        .error-list ul {
-          margin: 10px 0;
-          padding-left: 20px;
-        }
-
         .csv-format-info {
           background: #fff3cd;
           padding: 15px;
@@ -471,6 +642,15 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
           padding: 2px 6px;
           border-radius: 3px;
           font-family: monospace;
+        }
+
+        .csv-format-info ol {
+          margin: 10px 0;
+          padding-left: 25px;
+        }
+
+        .csv-format-info li {
+          margin: 8px 0;
         }
       `}</style>
     </div>
