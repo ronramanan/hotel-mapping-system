@@ -1,36 +1,44 @@
-import React, { useState, useEffect } from 'react';
-import { getMappingStats } from '../services/apiService';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import '../App.css';
 
 interface Stats {
+  totalMasters: number;
   totalSuppliers: number;
-  pendingReviews: number;
-  byStatus: Array<{ mapping_status: string; count: string }>;
+  byStatus: Array<{ mapping_status: string; count: number }>;
   bySupplier: Array<{
     supplier_code: string;
-    total_hotels: string;
-    mapped_hotels: string;
-    mapping_percentage: string;
+    total_hotels: number;
+    mapped_hotels: number;
+    mapping_percentage: number;
   }>;
+  pendingReviews: number;
 }
 
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    loadStats();
+    fetchStats();
   }, []);
 
-  const loadStats = async () => {
+  const fetchStats = async () => {
+    setLoading(true);
+    setError('');
+
     try {
-      setLoading(true);
-      const data = await getMappingStats();
+      const response = await fetch(`${process.env.REACT_APP_API_ENDPOINT}/stats`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch statistics');
+      }
+
+      const data = await response.json();
       setStats(data);
-      setError(null);
-    } catch (err) {
-      setError('Failed to load statistics. Make sure database is initialized.');
-      console.error('Error loading stats:', err);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load statistics');
     } finally {
       setLoading(false);
     }
@@ -38,118 +46,329 @@ const Dashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="loading">
-        <p>Loading dashboard...</p>
+      <div className="dashboard">
+        <h2>📊 Dashboard</h2>
+        <div className="loading">⏳ Loading statistics...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="card">
-        <div className="message message-error">{error}</div>
-        <p>Please initialize the database from the Admin page.</p>
+      <div className="dashboard">
+        <h2>📊 Dashboard</h2>
+        <div className="error-message">❌ {error}</div>
+        <button onClick={fetchStats} className="refresh-button">🔄 Retry</button>
       </div>
     );
   }
 
   if (!stats) {
-    return null;
+    return (
+      <div className="dashboard">
+        <h2>📊 Dashboard</h2>
+        <div className="empty-state">No data available</div>
+      </div>
+    );
   }
 
-  const totalHotels = stats.byStatus.reduce(
-    (sum, s) => sum + parseInt(s.count),
-    0
-  );
-  const mappedHotels =
-    parseInt(
-      stats.byStatus.find((s) => s.mapping_status === 'auto_mapped')?.count || '0'
-    ) +
-    parseInt(
-      stats.byStatus.find((s) => s.mapping_status === 'manually_mapped')?.count || '0'
-    );
-  const mappingRate = totalHotels > 0 ? (mappedHotels / totalHotels) * 100 : 0;
+  const totalMapped = stats.byStatus.find(s => s.mapping_status === 'auto_mapped' || s.mapping_status === 'manually_mapped')?.count || 0;
+  const totalUnmapped = stats.byStatus.find(s => s.mapping_status === 'unmapped')?.count || 0;
+  const totalSupplierHotels = stats.byStatus.reduce((sum, s) => sum + parseInt(s.count.toString()), 0);
+  const mappingPercentage = totalSupplierHotels > 0 ? Math.round((totalMapped / totalSupplierHotels) * 100) : 0;
 
   return (
-    <div>
-      <h1>Dashboard</h1>
+    <div className="dashboard">
+      <h2>📊 Hotel Mapping Dashboard</h2>
 
       <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-value">{totalHotels}</div>
-          <div className="stat-label">Total Hotels</div>
+        <div className="stat-card blue">
+          <div className="stat-icon">🏨</div>
+          <div className="stat-content">
+            <div className="stat-value">{stats.totalMasters?.toLocaleString() || 0}</div>
+            <div className="stat-label">Master Hotels</div>
+          </div>
         </div>
 
-        <div className="stat-card">
-          <div className="stat-value">{mappedHotels}</div>
-          <div className="stat-label">Mapped Hotels</div>
+        <div className="stat-card purple">
+          <div className="stat-icon">📦</div>
+          <div className="stat-content">
+            <div className="stat-value">{totalSupplierHotels.toLocaleString()}</div>
+            <div className="stat-label">Supplier Hotels</div>
+          </div>
         </div>
 
-        <div className="stat-card">
-          <div className="stat-value">{mappingRate.toFixed(1)}%</div>
-          <div className="stat-label">Mapping Rate</div>
+        <div className="stat-card green">
+          <div className="stat-icon">✅</div>
+          <div className="stat-content">
+            <div className="stat-value">{totalMapped.toLocaleString()}</div>
+            <div className="stat-label">Mapped ({mappingPercentage}%)</div>
+          </div>
         </div>
 
-        <div className="stat-card">
-          <div className="stat-value">{stats.pendingReviews}</div>
-          <div className="stat-label">Pending Reviews</div>
+        <div className="stat-card orange">
+          <div className="stat-icon">⏳</div>
+          <div className="stat-content">
+            <div className="stat-value">{stats.pendingReviews}</div>
+            <div className="stat-label">Pending Review</div>
+          </div>
         </div>
       </div>
 
-      <div className="card">
-        <h2 className="card-title">Mapping Status Breakdown</h2>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Status</th>
-              <th>Count</th>
-              <th>Percentage</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stats.byStatus.map((status) => (
-              <tr key={status.mapping_status}>
-                <td>{status.mapping_status.replace(/_/g, ' ')}</td>
-                <td>{status.count}</td>
-                <td>
-                  {((parseInt(status.count) / totalHotels) * 100).toFixed(1)}%
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="card">
-        <h2 className="card-title">Mapping by Supplier</h2>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Supplier</th>
-              <th>Total Hotels</th>
-              <th>Mapped</th>
-              <th>Coverage</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stats.bySupplier.map((supplier) => (
-              <tr key={supplier.supplier_code}>
-                <td>{supplier.supplier_code.toUpperCase()}</td>
-                <td>{supplier.total_hotels}</td>
-                <td>{supplier.mapped_hotels}</td>
-                <td>{supplier.mapping_percentage}%</td>
-              </tr>
-            ))}
-            {stats.bySupplier.length === 0 && (
+      <div className="dashboard-sections">
+        <div className="section">
+          <h3>Mapping Status</h3>
+          <table className="stats-table">
+            <thead>
               <tr>
-                <td colSpan={4} style={{ textAlign: 'center', color: '#999' }}>
-                  No suppliers yet. Import your first hotel!
-                </td>
+                <th>Status</th>
+                <th>Count</th>
+                <th>Percentage</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {stats.byStatus.map((status) => (
+                <tr key={status.mapping_status}>
+                  <td>{status.mapping_status.replace(/_/g, ' ').toUpperCase()}</td>
+                  <td>{parseInt(status.count.toString()).toLocaleString()}</td>
+                  <td>{totalSupplierHotels > 0 ? Math.round((parseInt(status.count.toString()) / totalSupplierHotels) * 100) : 0}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="section">
+          <h3>By Supplier</h3>
+          <table className="stats-table">
+            <thead>
+              <tr>
+                <th>Supplier</th>
+                <th>Total</th>
+                <th>Mapped</th>
+                <th>%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.bySupplier.map((supplier) => (
+                <tr key={supplier.supplier_code}>
+                  <td>{supplier.supplier_code}</td>
+                  <td>{parseInt(supplier.total_hotels.toString()).toLocaleString()}</td>
+                  <td>{parseInt(supplier.mapped_hotels.toString()).toLocaleString()}</td>
+                  <td>{supplier.mapping_percentage}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      <div className="quick-actions">
+        <h3>Quick Actions</h3>
+        <div className="actions-grid">
+          <Link to="/bulk-import-master" className="action-card">
+            <div className="action-icon">📥</div>
+            <div className="action-title">Import Masters</div>
+            <div className="action-desc">Add master hotel records</div>
+          </Link>
+
+          <Link to="/bulk-import-supplier" className="action-card">
+            <div className="action-icon">📤</div>
+            <div className="action-title">Import Suppliers</div>
+            <div className="action-desc">Add supplier hotel records</div>
+          </Link>
+
+          <Link to="/reviews" className="action-card">
+            <div className="action-icon">🔍</div>
+            <div className="action-title">Pending Reviews</div>
+            <div className="action-desc">Review {stats.pendingReviews} hotels</div>
+          </Link>
+
+          <Link to="/export" className="action-card">
+            <div className="action-icon">💾</div>
+            <div className="action-title">Export Mappings</div>
+            <div className="action-desc">Download CSV file</div>
+          </Link>
+        </div>
+      </div>
+
+      <style>{`
+        .dashboard {
+          max-width: 1400px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+          gap: 20px;
+          margin-bottom: 30px;
+        }
+
+        .stat-card {
+          background: white;
+          border-radius: 12px;
+          padding: 24px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          display: flex;
+          align-items: center;
+          gap: 20px;
+        }
+
+        .stat-card.blue { border-left: 4px solid #2196f3; }
+        .stat-card.purple { border-left: 4px solid #9c27b0; }
+        .stat-card.green { border-left: 4px solid #4caf50; }
+        .stat-card.orange { border-left: 4px solid #ff9800; }
+
+        .stat-icon {
+          font-size: 48px;
+        }
+
+        .stat-value {
+          font-size: 32px;
+          font-weight: bold;
+          color: #333;
+        }
+
+        .stat-label {
+          color: #666;
+          font-size: 14px;
+        }
+
+        .dashboard-sections {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+          gap: 20px;
+          margin-bottom: 30px;
+        }
+
+        .section {
+          background: white;
+          border-radius: 8px;
+          padding: 20px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .section h3 {
+          margin-top: 0;
+          color: #333;
+        }
+
+        .stats-table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+
+        .stats-table th {
+          background: #f5f5f5;
+          padding: 12px;
+          text-align: left;
+          font-weight: 600;
+          border-bottom: 2px solid #ddd;
+        }
+
+        .stats-table td {
+          padding: 10px 12px;
+          border-bottom: 1px solid #eee;
+        }
+
+        .stats-table tbody tr:hover {
+          background: #f9f9f9;
+        }
+
+        .quick-actions {
+          background: white;
+          border-radius: 8px;
+          padding: 20px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .quick-actions h3 {
+          margin-top: 0;
+        }
+
+        .actions-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 15px;
+        }
+
+        .action-card {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          padding: 20px;
+          border-radius: 8px;
+          text-decoration: none;
+          text-align: center;
+          transition: transform 0.2s;
+        }
+
+        .action-card:hover {
+          transform: translateY(-4px);
+        }
+
+        .action-icon {
+          font-size: 36px;
+          margin-bottom: 10px;
+        }
+
+        .action-title {
+          font-size: 18px;
+          font-weight: bold;
+          margin-bottom: 5px;
+        }
+
+        .action-desc {
+          font-size: 14px;
+          opacity: 0.9;
+        }
+
+        .loading {
+          text-align: center;
+          padding: 60px;
+          font-size: 18px;
+        }
+
+        .error-message {
+          background: #ffebee;
+          color: #c62828;
+          padding: 20px;
+          border-radius: 8px;
+          margin: 20px 0;
+        }
+
+        .refresh-button {
+          background: #2196f3;
+          color: white;
+          border: none;
+          padding: 12px 24px;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 16px;
+          font-weight: bold;
+        }
+
+        .empty-state {
+          text-align: center;
+          padding: 60px;
+          color: #666;
+        }
+
+        @media (max-width: 768px) {
+          .stats-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .dashboard-sections {
+            grid-template-columns: 1fr;
+          }
+
+          .actions-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </div>
   );
 };
