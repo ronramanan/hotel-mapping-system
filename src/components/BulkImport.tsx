@@ -150,7 +150,7 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
   };
 
   const uploadInBatches = async (hotels: any[]): Promise<ImportResult> => {
-    const batchSize = 500;
+    const batchSize = 10000; // Much larger batches - reduce API calls
     const batches = Math.ceil(hotels.length / batchSize);
     let totalImported = 0;
     let totalUpdated = 0;
@@ -170,7 +170,10 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
           body: JSON.stringify({ hotels: batch }),
         });
 
-        if (!response.ok) throw new Error(`Batch ${i + 1} failed`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Batch ${i + 1} failed: ${errorText}`);
+        }
 
         const batchResult = await response.json();
         totalImported += batchResult.imported || batchResult.created || 0;
@@ -179,9 +182,12 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
         if (batchResult.errors) {
           allErrors.push(...batchResult.errors);
         }
+        
+        console.log(`Batch ${i + 1}/${batches} completed: ${batchResult.imported || batchResult.created} imported`);
       } catch (err) {
         console.error(`Batch ${i + 1} error:`, err);
         totalFailed += batch.length;
+        allErrors.push({ hotel: `Batch ${i + 1}`, error: err.message });
       }
     }
 
