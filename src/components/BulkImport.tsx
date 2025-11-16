@@ -70,108 +70,115 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
     return result;
   };
 
-  // CORRECTED CSV PARSER - Replace in BulkImport.tsx
+  const parseCSV = (csvText: string, fileType: 'master' | 'supplier') => {
+    const lines = csvText.split('\n').filter(line => line.trim());
+    if (lines.length < 2) return [];
 
-const parseCSV = (csvText: string, type: 'master' | 'supplier') => {
-  const lines = csvText.split('\n').filter(line => line.trim());
-  if (lines.length < 2) return [];
+    // Parse header line with proper quote handling
+    const headerLine = parseCSVLine(lines[0]);
+    const headers = headerLine.map(h => h.toLowerCase().replace(/['"]/g, ''));
+    const hotels: any[] = [];
 
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
-  const hotels: any[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const values = parseCSVLine(lines[i]);
+      const hotel: any = {};
 
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim().replace(/['"]/g, ''));
-    const hotel: any = {};
-
-    headers.forEach((header, index) => {
-      const value = values[index];
-      
-      // CRITICAL: Handle id column FIRST before other cases
-      if (header === 'id' || header === 'hotel_id' || header === 'hotelid' || header === 'master_id') {
-        if (type === 'master') {
-          hotel.hotelId = value;  // For master hotels, this is the hotel_id
+      headers.forEach((header, index) => {
+        const value = values[index] ? values[index].replace(/['"]/g, '') : '';
+        
+        switch (header) {
+          // CRITICAL: Handle id column for master hotels
+          case 'id':
+          case 'hotel_id':
+          case 'hotelid':
+          case 'master_id':
+            if (fileType === 'master') {
+              hotel.hotelId = value;  // This becomes hotel_id in database
+            }
+            break;
+          
+          case 'hotel_name':
+          case 'hotelname':
+          case 'name':
+            hotel.hotelName = value;
+            break;
+          
+          case 'supplier_hotel_id':
+          case 'supplierhotelid':
+            if (fileType === 'supplier') {
+              hotel.supplierHotelId = value;
+            }
+            break;
+          
+          case 'supplier_code':
+          case 'suppliercode':
+            if (fileType === 'supplier') {
+              hotel.supplierCode = value || supplierCode;
+            }
+            break;
+          
+          case 'address':
+          case 'address_line1':
+          case 'addressline1':
+            hotel.addressLine1 = value;
+            break;
+          
+          case 'city':
+            hotel.city = value;
+            break;
+          
+          case 'country_code':
+          case 'country':
+            hotel.countryCode = value;
+            break;
+          
+          case 'postal_code':
+          case 'zip':
+          case 'zipcode':
+          case 'postcode':
+            hotel.postalCode = value;
+            break;
+          
+          case 'latitude':
+          case 'lat':
+            hotel.latitude = value ? parseFloat(value) : null;
+            break;
+          
+          case 'longitude':
+          case 'lon':
+          case 'lng':
+            hotel.longitude = value ? parseFloat(value) : null;
+            break;
+          
+          case 'phone':
+          case 'phone_number':
+            hotel.phoneNumber = value;
+            break;
+          
+          case 'chain':
+            hotel.chain = value;
+            break;
         }
-        // For supplier hotels, id is handled separately as supplier_hotel_id
-        return; // Exit early to avoid conflicts
-      }
+      });
 
-      switch (header) {
-        case 'hotel_name':
-        case 'hotelname':
-        case 'name':
-          hotel.hotelName = value;
-          break;
-        case 'supplier_hotel_id':
-        case 'supplierhotelid':
-          if (type === 'supplier') {
-            hotel.supplierHotelId = value;
-          }
-          break;
-        case 'supplier_code':
-        case 'suppliercode':
-          if (type === 'supplier') {
-            hotel.supplierCode = value;
-          }
-          break;
-        case 'address':
-        case 'address_line1':
-        case 'addressline1':
-          hotel.addressLine1 = value;
-          break;
-        case 'city':
-          hotel.city = value;
-          break;
-        case 'country_code':
-        case 'country':
-          hotel.countryCode = value;
-          break;
-        case 'postal_code':
-        case 'zip':
-        case 'zipcode':
-        case 'postcode':
-          hotel.postalCode = value;
-          break;
-        case 'latitude':
-        case 'lat':
-          hotel.latitude = value ? parseFloat(value) : null;
-          break;
-        case 'longitude':
-        case 'lon':
-        case 'lng':
-          hotel.longitude = value ? parseFloat(value) : null;
-          break;
-        case 'phone':
-        case 'phone_number':
-          hotel.phoneNumber = value;
-          break;
-        case 'chain':
-          hotel.chain = value;
-          break;
+      // Must have hotel name
+      if (hotel.hotelName) {
+        hotels.push(hotel);
       }
-    });
-
-    // VALIDATION: For master hotels, must have hotelId
-    if (type === 'master' && !hotel.hotelId) {
-      console.error('Hotel missing ID:', hotel.hotelName);
-      continue; // Skip this hotel
     }
 
-    // VALIDATION: Must have hotel name
-    if (!hotel.hotelName) {
-      console.error('Hotel missing name');
-      continue;
+    // DEBUG: Log what we parsed (INSIDE the function!)
+    console.log('=== CSV PARSE DEBUG ===');
+    console.log('Type:', fileType);
+    console.log('Total parsed:', hotels.length);
+    if (hotels.length > 0) {
+      console.log('First hotel:', JSON.stringify(hotels[0], null, 2));
+      console.log('Has hotelId?', !!hotels[0].hotelId);
     }
+    console.log('======================');
 
-    hotels.push(hotel);
-  }
-
-  return hotels;
-};
-
-// DEBUG: Add this after parsing to see what's being sent
-console.log('Parsed hotels sample:', hotels.slice(0, 3));
-console.log('First hotel structure:', JSON.stringify(hotels[0], null, 2));
-
+    return hotels;
+  };
 
   const uploadInBatches = async (hotels: any[]): Promise<ImportResult> => {
     const batchSize = 10000; // Much larger batches - reduce API calls
@@ -232,13 +239,14 @@ console.log('First hotel structure:', JSON.stringify(hotels[0], null, 2));
 
     try {
       const text = await file.text();
-      const hotels = parseCSV(text);
+      const hotels = parseCSV(text, type);
 
       if (hotels.length === 0) {
         throw new Error('No valid hotels found in CSV');
       }
 
       console.log(`Processing ${file.name}: ${hotels.length} hotels`);
+      console.log('Sample hotel data being sent:', hotels[0]);
 
       const uploadResult = await uploadInBatches(hotels);
       
@@ -303,13 +311,13 @@ console.log('First hotel structure:', JSON.stringify(hotels[0], null, 2));
       case 'processing': return '🔄';
       case 'completed': return '✅';
       case 'failed': return '❌';
-      default: return '';
+      default: return '📄';
     }
   };
 
   return (
     <div className="bulk-import">
-      <h2>Bulk {type === 'supplier' ? 'Supplier' : 'Master'} Import</h2>
+      <h2>📥 Bulk Import {type === 'master' ? 'Master Hotels' : 'Supplier Hotels'}</h2>
 
       <div className="import-form">
         {type === 'supplier' && (
@@ -319,14 +327,14 @@ console.log('First hotel structure:', JSON.stringify(hotels[0], null, 2));
               type="text"
               value={supplierCode}
               onChange={(e) => setSupplierCode(e.target.value)}
-              placeholder="e.g., SupplierA"
+              placeholder="Enter supplier code"
               disabled={uploading}
             />
           </div>
         )}
 
         <div className="form-group">
-          <label>CSV Files (select multiple):</label>
+          <label>Select CSV Files (can select multiple):</label>
           <input
             type="file"
             accept=".csv"
@@ -338,24 +346,25 @@ console.log('First hotel structure:', JSON.stringify(hotels[0], null, 2));
 
         {files.length > 0 && (
           <div className="file-info">
-            <strong>Selected {files.length} file(s):</strong>
+            <strong>Selected Files:</strong>
             <ul>
-              {files.map((f, i) => (
-                <li key={i}>{f.name} ({(f.size / 1024 / 1024).toFixed(2)} MB)</li>
+              {files.map((file, index) => (
+                <li key={index}>{file.name} ({Math.round(file.size / 1024)} KB)</li>
               ))}
             </ul>
-            <p><strong>Total size:</strong> {(files.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024).toFixed(2)} MB</p>
+            <p><strong>Total files:</strong> {files.length}</p>
           </div>
         )}
 
         <button onClick={handleUploadAll} disabled={uploading || files.length === 0}>
-          {uploading ? `Processing file ${currentFileIndex + 1} of ${files.length}...` : '📤 Upload All Files'}
+          {uploading ? '⏳ Uploading...' : `📤 Upload All Files (${files.length})`}
         </button>
       </div>
 
       {uploading && (
         <div className="overall-progress">
           <h3>Overall Progress: {overallProgress}%</h3>
+          <p>Processing file {currentFileIndex + 1} of {files.length}</p>
           <div className="progress-bar">
             <div className="progress-fill" style={{ width: `${overallProgress}%` }}>
               {overallProgress}%
@@ -368,7 +377,10 @@ console.log('First hotel structure:', JSON.stringify(hotels[0], null, 2));
         <div className="files-progress">
           <h3>File Status:</h3>
           {fileProgress.map((fp, index) => (
-            <div key={index} className={`file-status file-status-${fp.status}`}>
+            <div 
+              key={index} 
+              className={`file-status file-status-${fp.status}`}
+            >
               <div className="file-status-header">
                 <span className="status-icon">{getStatusIcon(fp.status)}</span>
                 <strong>{fp.filename}</strong>
@@ -377,10 +389,14 @@ console.log('First hotel structure:', JSON.stringify(hotels[0], null, 2));
               
               {fp.result && (
                 <div className="file-result">
-                  <span>Total: {fp.result.total}</span>
-                  <span className="success">Imported: {fp.result.imported}</span>
-                  {fp.result.updated > 0 && <span className="info">Updated: {fp.result.updated}</span>}
-                  {fp.result.failed > 0 && <span className="error">Failed: {fp.result.failed}</span>}
+                  <span>Total: {fp.result.total.toLocaleString()}</span>
+                  <span className="success">Imported: {fp.result.imported.toLocaleString()}</span>
+                  {fp.result.updated > 0 && (
+                    <span className="info">Updated: {fp.result.updated.toLocaleString()}</span>
+                  )}
+                  {fp.result.failed > 0 && (
+                    <span className="error">Failed: {fp.result.failed.toLocaleString()}</span>
+                  )}
                 </div>
               )}
               
@@ -434,7 +450,11 @@ console.log('First hotel structure:', JSON.stringify(hotels[0], null, 2));
         </ol>
         
         <h4>CSV Format:</h4>
-        <p>Required: <code>hotel_name</code>{type === 'supplier' && ', '}<code>{type === 'supplier' && 'supplier_hotel_id'}</code></p>
+        {type === 'master' ? (
+          <p>Required: <code>id</code>, <code>hotel_name</code></p>
+        ) : (
+          <p>Required: <code>hotel_name</code>, <code>supplier_hotel_id</code></p>
+        )}
         <p>Optional: <code>address_line1, city, country_code, postal_code, latitude, longitude, phone_number</code></p>
       </div>
 
