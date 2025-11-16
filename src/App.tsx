@@ -1,55 +1,43 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import './App.css';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import Login from './components/Login';
+import ProtectedRoute from './components/ProtectedRoute';
+import Navbar from './components/Navbar';
 import Dashboard from './components/Dashboard';
-import ImportHotel from './components/ImportHotel';
-import ReviewQueue from './components/ReviewQueue';
-import MasterHotels from './components/MasterHotels';
-import DatabaseInit from './components/DatabaseInit';
 import BulkImport from './components/BulkImport';
+import PendingReviews from './components/PendingReviews';
 import ExportMappings from './components/ExportMappings';
+import './App.css';
 
 function App() {
   return (
     <Router>
-      
-      
-      <div className="App">
-        <nav className="navbar">
-          <div className="nav-container">
-            <Link to="/" className="nav-brand">
-              🏨 Hotel Mapping System
-            </Link>
-            <div className="nav-links">
-              <Link to="/" className="nav-link">Dashboard</Link>
-              <Link to="/import" className="nav-link">Import Hotels</Link>
-              <Link to="/review" className="nav-link">Review Queue</Link>
-              <Link to="/masters" className="nav-link">Master Hotels</Link>
-              <Link to="/bulk-import-supplier">Bulk Import Suppliers</Link>
-              <Link to="/bulk-import-master">Bulk Import Masters</Link>
-              <Link to="/export">Export Mappings</Link>
-              <Link to="/admin" className="nav-link">Admin</Link>
-            </div>
-          </div>
-        </nav>
+      <Routes>
+        {/* Public route - Login */}
+        <Route path="/login" element={<Login />} />
 
-        <div className="content">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/import" element={<ImportHotel />} />
-            <Route path="/review" element={<ReviewQueue />} />
-            <Route path="/masters" element={<MasterHotels />} />
-            <Route path="/admin" element={<DatabaseInit />} />
-            <Route path="/bulk-import-supplier" element={<BulkImport type="supplier" />} />
-            <Route path="/bulk-import-master" element={<BulkImport type="master" />} />
-            <Route path="/export" element={<ExportMappings />} />
-          </Routes>
-        </div>
-
-        <footer className="footer">
-          <p>Hotel Mapping System v1.0 | Built for AWS Amplify</p>
-        </footer>
-      </div>
+        {/* Protected routes - require authentication */}
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <div className="app">
+                <Navbar />
+                <div className="app-content">
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/bulk-import-master" element={<BulkImport type="master" />} />
+                    <Route path="/bulk-import-supplier" element={<BulkImport type="supplier" />} />
+                    <Route path="/reviews" element={<PendingReviews />} />
+                    <Route path="/export" element={<ExportMappings />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </div>
+              </div>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
     </Router>
   );
 }
