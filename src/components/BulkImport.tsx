@@ -184,10 +184,10 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
         }
         
         console.log(`Batch ${i + 1}/${batches} completed: ${batchResult.imported || batchResult.created} imported`);
-      } catch (err) {
+      } catch (err: any) {
         console.error(`Batch ${i + 1} error:`, err);
         totalFailed += batch.length;
-        allErrors.push({ hotel: `Batch ${i + 1}`, error: err.message });
+        allErrors.push({ hotel: `Batch ${i + 1}`, error: err.message || 'Unknown error' });
       }
     }
 
