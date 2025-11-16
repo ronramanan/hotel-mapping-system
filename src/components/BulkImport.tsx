@@ -70,84 +70,108 @@ const BulkImport: React.FC<BulkImportProps> = ({ type }) => {
     return result;
   };
 
-  const parseCSV = (text: string): any[] => {
-    const lines = text.split('\n').filter(line => line.trim());
-    if (lines.length < 2) return [];
+  // CORRECTED CSV PARSER - Replace in BulkImport.tsx
 
-    const headers = parseCSVLine(lines[0]).map(h => 
-      h.replace(/^["']|["']$/g, '').trim().toLowerCase()
-    );
-    
-    const hotels = [];
+const parseCSV = (csvText: string, type: 'master' | 'supplier') => {
+  const lines = csvText.split('\n').filter(line => line.trim());
+  if (lines.length < 2) return [];
 
-    for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVLine(lines[i]).map(v => 
-        v.replace(/^["']|["']$/g, '').trim()
-      );
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+  const hotels: any[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(',').map(v => v.trim().replace(/['"]/g, ''));
+    const hotel: any = {};
+
+    headers.forEach((header, index) => {
+      const value = values[index];
       
-      const hotel: any = {};
-
-      headers.forEach((header, index) => {
-        const value = values[index];
-        
-        switch (header) {
-          case 'hotel_name':
-          case 'hotelname':
-          case 'name':
-            hotel.hotelName = value;
-            break;
-          case 'supplier_hotel_id':
-          case 'hotel_id':
-          case 'id':
-            if (type === 'supplier') {
-              hotel.supplierHotelId = value;
-            }
-            break;
-          case 'address':
-          case 'address_line1':
-          case 'addressline1':
-            hotel.addressLine1 = value;
-            break;
-          case 'city':
-            hotel.city = value;
-            break;
-          case 'country_code':
-          case 'country':
-            hotel.countryCode = value;
-            break;
-          case 'postal_code':
-          case 'zip':
-          case 'zipcode':
-          case 'postcode':
-            hotel.postalCode = value;
-            break;
-          case 'latitude':
-          case 'lat':
-            hotel.latitude = value ? parseFloat(value) : null;
-            break;
-          case 'longitude':
-          case 'lon':
-          case 'lng':
-            hotel.longitude = value ? parseFloat(value) : null;
-            break;
-          case 'phone':
-          case 'phone_number':
-            hotel.phoneNumber = value;
-            break;
+      // CRITICAL: Handle id column FIRST before other cases
+      if (header === 'id' || header === 'hotel_id' || header === 'hotelid' || header === 'master_id') {
+        if (type === 'master') {
+          hotel.hotelId = value;  // For master hotels, this is the hotel_id
         }
-      });
-
-      if (type === 'supplier' && supplierCode) {
-        hotel.supplierCode = supplierCode;
+        // For supplier hotels, id is handled separately as supplier_hotel_id
+        return; // Exit early to avoid conflicts
       }
 
-      if (hotel.hotelName && (type === 'master' || hotel.supplierHotelId)) {
-        hotels.push(hotel);
+      switch (header) {
+        case 'hotel_name':
+        case 'hotelname':
+        case 'name':
+          hotel.hotelName = value;
+          break;
+        case 'supplier_hotel_id':
+        case 'supplierhotelid':
+          if (type === 'supplier') {
+            hotel.supplierHotelId = value;
+          }
+          break;
+        case 'supplier_code':
+        case 'suppliercode':
+          if (type === 'supplier') {
+            hotel.supplierCode = value;
+          }
+          break;
+        case 'address':
+        case 'address_line1':
+        case 'addressline1':
+          hotel.addressLine1 = value;
+          break;
+        case 'city':
+          hotel.city = value;
+          break;
+        case 'country_code':
+        case 'country':
+          hotel.countryCode = value;
+          break;
+        case 'postal_code':
+        case 'zip':
+        case 'zipcode':
+        case 'postcode':
+          hotel.postalCode = value;
+          break;
+        case 'latitude':
+        case 'lat':
+          hotel.latitude = value ? parseFloat(value) : null;
+          break;
+        case 'longitude':
+        case 'lon':
+        case 'lng':
+          hotel.longitude = value ? parseFloat(value) : null;
+          break;
+        case 'phone':
+        case 'phone_number':
+          hotel.phoneNumber = value;
+          break;
+        case 'chain':
+          hotel.chain = value;
+          break;
       }
+    });
+
+    // VALIDATION: For master hotels, must have hotelId
+    if (type === 'master' && !hotel.hotelId) {
+      console.error('Hotel missing ID:', hotel.hotelName);
+      continue; // Skip this hotel
     }
 
-    return hotels;
-  };
+    // VALIDATION: Must have hotel name
+    if (!hotel.hotelName) {
+      console.error('Hotel missing name');
+      continue;
+    }
+
+    hotels.push(hotel);
+  }
+
+  return hotels;
+};
+
+// DEBUG: Add this after parsing to see what's being sent
+console.log('Parsed hotels sample:', hotels.slice(0, 3));
+console.log('First hotel structure:', JSON.stringify(hotels[0], null, 2));
+
 
   const uploadInBatches = async (hotels: any[]): Promise<ImportResult> => {
     const batchSize = 10000; // Much larger batches - reduce API calls
