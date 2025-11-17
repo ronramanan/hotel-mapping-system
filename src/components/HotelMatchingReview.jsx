@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, CheckCircle, XCircle, MapPin, Building, AlertCircle } from 'lucide-react';
+import { Search, CheckCircle, XCircle, MapPin, Building, AlertCircle, RefreshCw } from 'lucide-react';
 
 const HotelMatchingReview = () => {
   const [unmatchedHotels, setUnmatchedHotels] = useState([]);
@@ -7,89 +7,72 @@ const HotelMatchingReview = () => {
   const [potentialMatches, setPotentialMatches] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [matchLoading, setMatchLoading] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     matched: 0,
     unmatched: 0
   });
   const [filters, setFilters] = useState({
-    country: '',
+    country: 'all',
     city: '',
     confidence: 'all'
   });
-  const [connectionStatus, setConnectionStatus] = useState('checking'); // checking, connected, failed, no-api
+  const [countries, setCountries] = useState([]);
+  const [connectionStatus, setConnectionStatus] = useState('checking');
   const [errorMessage, setErrorMessage] = useState('');
 
   const API_BASE = process.env.REACT_APP_API_URL || process.env.REACT_APP_API_ENDPOINT || '';
 
-  // Mock data for development
-  const mockUnmatchedHotels = [
-    {
-      id: 1,
-      supplier_hotel_id: 'SUP001-H001',
-      hotel_name: 'Grand Plaza Hotel & Suites',
-      city: 'London',
-      country_code: 'GB',
-      address_line1: '123 Oxford Street',
-      latitude: 51.5074,
-      longitude: -0.1278
-    },
-    {
-      id: 2,
-      supplier_hotel_id: 'SUP001-H002',
-      hotel_name: 'Park View Inn',
-      city: 'Manchester',
-      country_code: 'GB',
-      address_line1: '45 Market Street',
-      latitude: 53.4808,
-      longitude: -2.2426
-    },
-    {
-      id: 3,
-      supplier_hotel_id: 'SUP002-H001',
-      hotel_name: 'Riverside Hotel & Spa',
-      city: 'Edinburgh',
-      country_code: 'GB',
-      address_line1: '12 Princes Street',
-      latitude: 55.9533,
-      longitude: -3.1883
-    }
-  ];
+  // Fetch countries on mount
+  useEffect(() => {
+    fetchCountries();
+    fetchUnmatchedHotels();
+  }, []);
 
-  const mockMasterHotels = [
-    {
-      id: 101,
-      hotel_id: 'MASTER-001',
-      hotel_name: 'Grand Plaza Hotel',
-      city: 'London',
-      country_code: 'GB',
-      address_line1: '123 Oxford St',
-      latitude: 51.5075,
-      longitude: -0.1279
-    },
-    {
-      id: 102,
-      hotel_id: 'MASTER-002',
-      hotel_name: 'Park View Hotel',
-      city: 'Manchester',
-      country_code: 'GB',
-      address_line1: '47 Market Street',
-      latitude: 53.4809,
-      longitude: -2.2427
+  // Refetch when country filter changes
+  useEffect(() => {
+    if (filters.country !== 'all') {
+      fetchUnmatchedHotels();
     }
-  ];
+  }, [filters.country]);
+
+  // Fetch all countries
+  const fetchCountries = async () => {
+    if (!API_BASE) {
+      console.warn('No API endpoint configured for countries');
+      return;
+    }
+
+    try {
+      console.log('🌍 Fetching countries from:', `${API_BASE}/countries`);
+      const response = await fetch(`${API_BASE}/countries`, {
+        method: 'GET',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Received countries:', data.countries?.length || 0);
+        setCountries(data.countries || []);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching countries:', error);
+    }
+  };
 
   // Fetch unmatched hotels
   const fetchUnmatchedHotels = async () => {
     setLoading(true);
     setErrorMessage('');
     
-    // Check if API is configured
     if (!API_BASE) {
       console.error('❌ No API endpoint configured!');
-      console.error('Please set REACT_APP_API_ENDPOINT or REACT_APP_API_URL environment variable');
       setConnectionStatus('no-api');
-      setErrorMessage('No API endpoint configured. Please set environment variables in Amplify.');
+      setErrorMessage('No API endpoint configured. Please set REACT_APP_API_ENDPOINT in Amplify.');
       setLoading(false);
       return;
     }
@@ -98,16 +81,25 @@ const HotelMatchingReview = () => {
     console.log('📡 Fetching unmatched hotels from:', `${API_BASE}/unmatched-hotels`);
     
     try {
-      const url = `${API_BASE}/unmatched-hotels?limit=50`;
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (filters.country && filters.country !== 'all') {
+        params.append('country', filters.country);
+      }
+      if (filters.city) {
+        params.append('city', filters.city);
+      }
+      params.append('limit', '100');
+
+      const url = `${API_BASE}/unmatched-hotels?${params.toString()}`;
       console.log('🌐 Making request to:', url);
       
       const response = await fetch(url, {
-        method: 'POST',
+        method: 'GET',
         headers: { 
           'Content-Type': 'application/json',
           'Accept': 'application/json'
-        },
-        body: JSON.stringify(filters)
+        }
       });
       
       console.log('📥 Response status:', response.status, response.statusText);
@@ -125,31 +117,21 @@ const HotelMatchingReview = () => {
       
       setUnmatchedHotels(data.hotels || []);
       if (data.stats) {
-        setStats(prev => ({ ...prev, ...data.stats }));
+        setStats(data.stats);
       }
       setConnectionStatus('connected');
       
       if (data.hotels?.length === 0) {
-        setErrorMessage('No unmatched hotels found. All hotels may be already matched.');
+        setErrorMessage('No unmatched hotels found. All hotels may be already matched or try adjusting filters.');
       }
       
     } catch (error) {
       console.error('❌ Error fetching unmatched hotels:', error);
       console.error('Error details:', error.message);
       
-      // Check if it's a CORS error
       if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
         setConnectionStatus('failed');
-        setErrorMessage(`
-          CORS Error: Your API is blocking requests from this domain.
-          
-          API: ${API_BASE}
-          Frontend: ${window.location.origin}
-          
-          Fix: Enable CORS in AWS API Gateway for origin: ${window.location.origin}
-          
-          See FIX_CORS_ERROR.md for detailed instructions.
-        `);
+        setErrorMessage(`CORS Error: API is blocking requests. Enable CORS in AWS API Gateway for: ${window.location.origin}`);
       } else {
         setConnectionStatus('failed');
         setErrorMessage(`Failed to connect to API: ${error.message}`);
@@ -159,40 +141,30 @@ const HotelMatchingReview = () => {
     setLoading(false);
   };
 
-  // Search for potential matches
+  // Search for potential matches when a hotel is selected
   const searchPotentialMatches = async (supplierHotel) => {
-    setLoading(true);
+    setSelectedHotel(supplierHotel);
+    setMatchLoading(true);
+    setPotentialMatches([]);
     setErrorMessage('');
     
-    // Check if API is configured
     if (!API_BASE) {
       console.error('❌ No API endpoint configured!');
       setErrorMessage('Cannot search matches - no API endpoint configured');
-      setLoading(false);
+      setMatchLoading(false);
       return;
     }
 
     console.log('🔍 Searching potential matches for:', supplierHotel.hotel_name);
-    console.log('📡 API endpoint:', `${API_BASE}/potential-matches`);
+    console.log('📡 API endpoint:', `${API_BASE}/potential-matches/${supplierHotel.id}`);
     
     try {
-      const requestBody = {
-        hotelName: supplierHotel.hotel_name,
-        city: supplierHotel.city,
-        countryCode: supplierHotel.country_code,
-        latitude: supplierHotel.latitude,
-        longitude: supplierHotel.longitude,
-        customSearch: searchQuery
-      };
-      console.log('📤 Request body:', requestBody);
-      
-      const response = await fetch(`${API_BASE}/potential-matches`, {
-        method: 'POST',
+      const response = await fetch(`${API_BASE}/potential-matches/${supplierHotel.id}`, {
+        method: 'GET',
         headers: { 
           'Content-Type': 'application/json',
           'Accept': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
+        }
       });
       
       console.log('📥 Response status:', response.status, response.statusText);
@@ -210,7 +182,7 @@ const HotelMatchingReview = () => {
       setPotentialMatches(data.matches || []);
       
       if (data.matches?.length === 0) {
-        setErrorMessage('No potential matches found for this hotel.');
+        setErrorMessage('No potential matches found. Try custom search or mark as no match.');
       }
       
     } catch (error) {
@@ -218,50 +190,39 @@ const HotelMatchingReview = () => {
       setErrorMessage(`Failed to search matches: ${error.message}`);
       setPotentialMatches([]);
     }
-    setLoading(false);
+    setMatchLoading(false);
   };
 
-  // Reject a match
-  const rejectMatch = async (supplierHotelId, masterHotelId) => {
-    // Check if API is configured
-    if (!API_BASE) {
-      console.warn('No API endpoint configured. Demo mode.');
-      setPotentialMatches(prev => prev.filter(m => m.id !== masterHotelId));
-      alert('Match rejected (Demo mode - no API configured)');
-      return;
-    }
-
+  // Custom search in master hotels
+  const handleCustomSearch = async () => {
+    if (!searchQuery.trim() || !selectedHotel) return;
+    
+    setMatchLoading(true);
     try {
-      console.log('Rejecting match via API:', `${API_BASE}/reject-match`);
-      
-      const response = await fetch(`${API_BASE}/reject-match`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          supplierHotelId,
-          masterHotelId
-        })
+      const response = await fetch(`${API_BASE}/master-hotels/search?q=${encodeURIComponent(searchQuery)}`, {
+        method: 'GET',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
       });
       
       if (response.ok) {
-        console.log('Match rejected successfully');
-        // Remove this match from potential matches list
-        setPotentialMatches(prev => prev.filter(m => m.id !== masterHotelId));
-        alert('Match rejected');
-      } else {
-        throw new Error(`API returned ${response.status}`);
+        const data = await response.json();
+        setPotentialMatches(data.hotels || []);
       }
     } catch (error) {
-      console.error('Error rejecting match:', error);
-      alert('Failed to reject match. Check console for details.');
+      console.error('Error in custom search:', error);
+      setErrorMessage(`Custom search failed: ${error.message}`);
+    } finally {
+      setMatchLoading(false);
     }
   };
 
   // Manual match hotels
   const matchHotels = async (supplierHotelId, masterHotelId, confidence) => {
-    // Check if API is configured
     if (!API_BASE) {
-      alert('❌ Cannot match hotels - No API endpoint configured!\nPlease set REACT_APP_API_ENDPOINT in Amplify environment variables.');
+      alert('❌ Cannot match hotels - No API endpoint configured!');
       return;
     }
 
@@ -276,10 +237,10 @@ const HotelMatchingReview = () => {
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          supplierHotelId,
-          masterHotelId,
-          confidence,
-          matchMethod: 'manual_review'
+          supplier_hotel_id: supplierHotelId,
+          master_hotel_id: masterHotelId,
+          confidence_score: confidence || 1.0,
+          match_type: 'manual'
         })
       });
       
@@ -287,7 +248,6 @@ const HotelMatchingReview = () => {
       
       if (response.ok) {
         console.log('✅ Match successful');
-        // Remove from unmatched list
         setUnmatchedHotels(prev => prev.filter(h => h.id !== supplierHotelId));
         setSelectedHotel(null);
         setPotentialMatches([]);
@@ -304,251 +264,73 @@ const HotelMatchingReview = () => {
       }
     } catch (error) {
       console.error('❌ Error matching hotels:', error);
-      alert(`❌ Failed to match hotels: ${error.message}\n\nCheck browser console (F12) for details.`);
+      alert(`❌ Failed to match hotels: ${error.message}`);
     }
   };
 
   // Mark as no match available
-  const markAsNoMatch = async (supplierHotelId) => {
-    // Check if API is configured
-    if (!API_BASE) {
-      console.warn('No API endpoint configured. Demo mode.');
-      setUnmatchedHotels(prev => prev.filter(h => h.id !== supplierHotelId));
-      setSelectedHotel(null);
-      alert('Marked as no match available (Demo mode - no API configured)');
-      return;
-    }
+  const markAsNoMatch = async () => {
+    if (!selectedHotel || !API_BASE) return;
 
     try {
-      console.log('Marking as no match via API:', `${API_BASE}/mark-no-match`);
-      
       const response = await fetch(`${API_BASE}/mark-no-match`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ supplierHotelId })
+        body: JSON.stringify({
+          supplierHotelId: selectedHotel.id
+        })
       });
       
       if (response.ok) {
-        console.log('Marked as no match successfully');
-        setUnmatchedHotels(prev => prev.filter(h => h.id !== supplierHotelId));
+        setUnmatchedHotels(prev => prev.filter(h => h.id !== selectedHotel.id));
         setSelectedHotel(null);
-        alert('Marked as no match available');
-      } else {
-        throw new Error(`API returned ${response.status}`);
+        setPotentialMatches([]);
+        alert('✅ Marked as no match available');
       }
     } catch (error) {
-      console.error('Error marking no match:', error);
-      alert('Failed to mark as no match. Check console for details.');
+      console.error('Error marking as no match:', error);
+      alert('Failed to mark as no match');
     }
   };
-
-  // Calculate similarity score
-  const calculateSimilarity = (supplier, master) => {
-    let score = 0;
-    let factors = [];
-    let distance = null;
-    
-    // Name similarity
-    const nameSim = stringSimilarity(supplier.hotel_name, master.hotel_name);
-    score += nameSim * 0.4;
-    if (nameSim > 0.7) factors.push(`Name: ${Math.round(nameSim * 100)}%`);
-    
-    // Location proximity
-    if (supplier.latitude && master.latitude) {
-      distance = haversineDistance(
-        supplier.latitude, supplier.longitude,
-        master.latitude, master.longitude
-      );
-      
-      if (distance < 0.1) {
-        score += 0.3;
-        factors.push(`Distance: ${Math.round(distance * 1000)}m`);
-      } else if (distance < 1) {
-        score += 0.2;
-        factors.push(`Distance: ${distance.toFixed(2)}km`);
-      } else if (distance < 5) {
-        score += 0.1;
-        factors.push(`Distance: ${distance.toFixed(2)}km`);
-      } else {
-        factors.push(`Distance: ${distance.toFixed(2)}km`);
-      }
-    }
-    
-    // Same city
-    if (supplier.city === master.city) {
-      score += 0.2;
-      factors.push('Same city');
-    }
-    
-    // Address similarity
-    if (supplier.address_line1 && master.address_line1) {
-      const addrSim = stringSimilarity(supplier.address_line1, master.address_line1);
-      if (addrSim > 0.5) {
-        score += addrSim * 0.1;
-        factors.push(`Address: ${Math.round(addrSim * 100)}%`);
-      }
-    }
-    
-    return { score, factors, distance };
-  };
-
-  // String similarity helper with address normalization
-  const stringSimilarity = (str1, str2) => {
-    if (!str1 || !str2) return 0;
-    
-    // Normalize addresses - expand abbreviations
-    const normalizeAddress = (str) => {
-      return str
-        .toLowerCase()
-        .replace(/\bst\b/g, 'street')
-        .replace(/\bave\b/g, 'avenue')
-        .replace(/\brd\b/g, 'road')
-        .replace(/\bdr\b/g, 'drive')
-        .replace(/\bln\b/g, 'lane')
-        .replace(/\bblvd\b/g, 'boulevard')
-        .replace(/\bct\b/g, 'court')
-        .replace(/\bpl\b/g, 'place')
-        .replace(/\bsq\b/g, 'square')
-        .replace(/\bapt\b/g, 'apartment')
-        .replace(/\bste\b/g, 'suite')
-        .replace(/[^a-z0-9]/g, '');
-    };
-    
-    const s1 = normalizeAddress(str1);
-    const s2 = normalizeAddress(str2);
-    
-    if (s1 === s2) return 1;
-    
-    const longer = s1.length > s2.length ? s1 : s2;
-    const shorter = s1.length > s2.length ? s2 : s1;
-    
-    if (longer.length === 0) return 1;
-    const editDistance = levenshteinDistance(longer, shorter);
-    return (longer.length - editDistance) / longer.length;
-  };
-
-  // Levenshtein distance
-  const levenshteinDistance = (str1, str2) => {
-    const matrix = [];
-    for (let i = 0; i <= str2.length; i++) {
-      matrix[i] = [i];
-    }
-    for (let j = 0; j <= str1.length; j++) {
-      matrix[0][j] = j;
-    }
-    for (let i = 1; i <= str2.length; i++) {
-      for (let j = 1; j <= str1.length; j++) {
-        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-          matrix[i][j] = matrix[i - 1][j - 1];
-        } else {
-          matrix[i][j] = Math.min(
-            matrix[i - 1][j - 1] + 1,
-            matrix[i][j - 1] + 1,
-            matrix[i - 1][j] + 1
-          );
-        }
-      }
-    }
-    return matrix[str2.length][str1.length];
-  };
-
-  // Haversine distance
-  const haversineDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371; // km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  };
-
-  useEffect(() => {
-    fetchUnmatchedHotels();
-  }, [filters]);
-
-  useEffect(() => {
-    if (selectedHotel) {
-      searchPotentialMatches(selectedHotel);
-    }
-  }, [selectedHotel]);
 
   return (
     <div style={styles.container}>
-      {/* Header */}
       <div style={styles.header}>
         <h1 style={styles.title}>Hotel Matching Review</h1>
+        {connectionStatus === 'no-api' && (
+          <div style={styles.demoNotice}>⚠️ No API Configured</div>
+        )}
+        {connectionStatus === 'connected' && (
+          <div style={{...styles.demoNotice, background: '#d4edda', color: '#155724'}}>
+            ✅ Connected
+          </div>
+        )}
       </div>
 
-      {/* Connection Status Banner */}
-      {connectionStatus === 'no-api' && (
+      {errorMessage && (
         <div style={styles.errorBanner}>
-          <strong>⚠️ No API Configured</strong>
-          <div style={styles.errorText}>
-            Set REACT_APP_API_ENDPOINT in AWS Amplify environment variables
-          </div>
-        </div>
-      )}
-      
-      {connectionStatus === 'failed' && errorMessage && (
-        <div style={styles.errorBanner}>
-          <strong>❌ API Connection Failed</strong>
-          <div style={styles.errorText}>
-            {errorMessage.includes('CORS') ? (
-              <>
-                <strong>CORS Error Detected</strong>
-                <div style={{ marginTop: '10px', whiteSpace: 'pre-wrap' }}>{errorMessage}</div>
-                <div style={styles.corsFixButton}>
-                  <strong>How to Fix:</strong>
-                  <ol style={{ margin: '10px 0', paddingLeft: '20px' }}>
-                    <li>Go to AWS API Gateway Console</li>
-                    <li>Select your API: 511whmi057</li>
-                    <li>Enable CORS for all endpoints</li>
-                    <li>Set origin to: {window.location.origin}</li>
-                    <li>Deploy API to prod stage</li>
-                  </ol>
-                  <a 
-                    href="https://docs.aws.amazon.com/apigateway/latest/developerguide/how-to-cors.html" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{ color: '#721c24', textDecoration: 'underline' }}
-                  >
-                    AWS CORS Documentation →
-                  </a>
-                </div>
-              </>
-            ) : (
-              errorMessage
-            )}
-          </div>
-          <div style={styles.errorHint}>
-            Check browser console (F12) for detailed error messages
-          </div>
-        </div>
-      )}
-      
-      {connectionStatus === 'connected' && (
-        <div style={styles.successBanner}>
-          ✅ Connected to live database: {API_BASE}
+          <strong>⚠️ Error</strong>
+          <p style={styles.errorText}>{errorMessage}</p>
         </div>
       )}
 
-      {/* Stats */}
+      {/* Statistics */}
       <div style={styles.statsContainer}>
-        <div style={styles.statCard}>
-          <div style={styles.statLabel}>Total Supplier Hotels</div>
-          <div style={styles.statValue}>{stats.total.toLocaleString()}</div>
+        <div style={{...styles.statCard, ...styles.blueCard}}>
+          <div style={styles.statLabel}>Total Hotels</div>
+          <div style={styles.statValue}>{stats.total || 0}</div>
         </div>
         <div style={{...styles.statCard, ...styles.greenCard}}>
           <div style={styles.statLabel}>Matched</div>
-          <div style={styles.statValue}>
-            {stats.matched.toLocaleString()} ({((stats.matched / stats.total) * 100).toFixed(1)}%)
-          </div>
+          <div style={styles.statValue}>{stats.matched || 0}</div>
         </div>
         <div style={{...styles.statCard, ...styles.yellowCard}}>
           <div style={styles.statLabel}>Unmatched</div>
-          <div style={styles.statValue}>{stats.unmatched.toLocaleString()}</div>
+          <div style={styles.statValue}>{stats.unmatched || 0}</div>
+        </div>
+        <div style={{...styles.statCard, ...styles.purpleCard}}>
+          <div style={styles.statLabel}>No Match</div>
+          <div style={styles.statValue}>{stats.noMatch || 0}</div>
         </div>
       </div>
 
@@ -557,190 +339,204 @@ const HotelMatchingReview = () => {
         {/* Left Panel - Unmatched Hotels */}
         <div style={styles.panel}>
           <div style={styles.panelHeader}>
-            <h2 style={styles.panelTitle}>Unmatched Supplier Hotels</h2>
-            
-            {/* Filters */}
+            <h3 style={styles.panelTitle}>Unmatched Supplier Hotels</h3>
             <div style={styles.filters}>
               <select
                 style={styles.select}
                 value={filters.country}
                 onChange={(e) => setFilters({...filters, country: e.target.value})}
               >
-                <option value="">All Countries</option>
-                <option value="US">United States</option>
-                <option value="GB">United Kingdom</option>
-                <option value="FR">France</option>
-                <option value="DE">Germany</option>
-                <option value="SG">Singapore</option>
+                <option value="all">✓ All Countries</option>
+                {countries.map(country => (
+                  <option key={country} value={country}>{country}</option>
+                ))}
               </select>
-              
               <input
                 type="text"
-                placeholder="Filter by city..."
                 style={styles.input}
+                placeholder="Filter by city..."
                 value={filters.city}
                 onChange={(e) => setFilters({...filters, city: e.target.value})}
+                onKeyPress={(e) => e.key === 'Enter' && fetchUnmatchedHotels()}
               />
-              
-              <button
+              <button 
+                style={styles.refreshButton} 
                 onClick={fetchUnmatchedHotels}
-                style={styles.refreshButton}
+                disabled={loading}
               >
+                <RefreshCw size={16} style={{marginRight: '4px'}} />
                 Refresh
               </button>
             </div>
           </div>
-          
           <div style={styles.listContainer}>
-            {loading && <div style={styles.loading}>Loading...</div>}
-            
-            {unmatchedHotels.map((hotel) => (
-              <div
-                key={hotel.id}
-                style={{
-                  ...styles.hotelCard,
-                  ...(selectedHotel?.id === hotel.id ? styles.selectedCard : {})
-                }}
-                onClick={() => setSelectedHotel(hotel)}
-              >
-                <div style={styles.hotelName}>{hotel.hotel_name}</div>
-                <div style={styles.hotelInfo}>
-                  <div style={styles.infoRow}>
-                    <MapPin size={12} />
-                    <span style={styles.infoText}>{hotel.city}, {hotel.country_code}</span>
+            {loading ? (
+              <div style={styles.loading}>
+                <RefreshCw size={32} className="spin" />
+                <p>Loading hotels...</p>
+              </div>
+            ) : unmatchedHotels.length === 0 ? (
+              <div style={styles.emptyState}>
+                <AlertCircle size={48} style={styles.emptyIcon} />
+                <p style={styles.emptyText}>No unmatched hotels found</p>
+                {(filters.country !== 'all' || filters.city) && (
+                  <p style={{fontSize: '12px', color: '#999'}}>Try adjusting your filters</p>
+                )}
+              </div>
+            ) : (
+              unmatchedHotels.map(hotel => (
+                <div
+                  key={hotel.id}
+                  style={{
+                    ...styles.hotelCard,
+                    ...(selectedHotel?.id === hotel.id ? styles.selectedCard : {})
+                  }}
+                  onClick={() => searchPotentialMatches(hotel)}
+                >
+                  <div style={styles.hotelName}>{hotel.hotel_name || hotel.name}</div>
+                  <div style={styles.hotelInfo}>
+                    <div style={styles.infoRow}>
+                      <MapPin size={14} />
+                      <span style={styles.infoText}>
+                        {hotel.city}, {hotel.country_code || hotel.country}
+                      </span>
+                    </div>
+                    <div style={styles.infoRow}>
+                      <Building size={14} />
+                      <span style={styles.infoText}>IOL X - {hotel.supplier_hotel_id}</span>
+                    </div>
                   </div>
                   {hotel.address_line1 && (
-                    <div style={styles.infoRow}>
-                      <Building size={12} />
-                      <span style={styles.infoText}>{hotel.address_line1}</span>
-                    </div>
+                    <div style={styles.hotelId}>{hotel.address_line1}</div>
                   )}
                 </div>
-                <div style={styles.hotelId}>
-                  ID: {hotel.supplier_hotel_id}
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
         {/* Right Panel - Potential Matches */}
         <div style={styles.panel}>
-          <div style={styles.panelHeader}>
-            <h2 style={styles.panelTitle}>Potential Master Hotel Matches</h2>
-            
-            {selectedHotel && (
-              <div style={styles.searchSection}>
-                <div style={styles.matchingFor}>
-                  Matching for: <span style={styles.matchingHotelName}>{selectedHotel.hotel_name}</span>
-                </div>
-                <div style={styles.searchBar}>
-                  <input
-                    type="text"
-                    placeholder="Custom search in master hotels..."
-                    style={styles.searchInput}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <button
-                    onClick={() => searchPotentialMatches(selectedHotel)}
-                    style={styles.searchButton}
-                  >
-                    <Search size={16} />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          <div style={styles.listContainer}>
-            {!selectedHotel && (
-              <div style={styles.emptyState}>
-                Select a supplier hotel to see potential matches
-              </div>
-            )}
-            
-            {selectedHotel && loading && (
-              <div style={styles.loading}>Searching for matches...</div>
-            )}
-            
-            {selectedHotel && !loading && potentialMatches.length === 0 && (
-              <div style={styles.emptyState}>
-                <AlertCircle style={styles.emptyIcon} size={32} />
-                <div style={styles.emptyText}>No potential matches found</div>
-                <button
-                  onClick={() => markAsNoMatch(selectedHotel.id)}
-                  style={styles.noMatchButton}
-                >
-                  Mark as No Match Available
-                </button>
-              </div>
-            )}
-            
-            {potentialMatches.map((match) => {
-              const similarity = calculateSimilarity(selectedHotel, match);
-              const confidenceColor = similarity.score > 0.8 ? '#4caf50' : 
-                                     similarity.score > 0.6 ? '#ff9800' : '#f44336';
-              
-              return (
-                <div key={match.id} style={styles.matchCard}>
-                  <div style={styles.matchContent}>
-                    <div style={styles.matchLeft}>
-                      <div style={styles.matchName}>{match.hotel_name}</div>
-                      <div style={styles.matchInfo}>
-                        <div style={styles.infoRow}>
-                          <MapPin size={12} />
-                          <span style={styles.infoText}>{match.city}, {match.country_code}</span>
-                        </div>
-                        {match.address_line1 && (
-                          <div style={styles.infoRow}>
-                            <Building size={12} />
-                            <span style={styles.infoText}>{match.address_line1}</span>
-                          </div>
-                        )}
-                      </div>
-                      <div style={styles.matchId}>
-                        Master ID: {match.hotel_id}
-                      </div>
-                      
-                      {/* Similarity factors */}
-                      <div style={styles.factorsContainer}>
-                        {similarity.factors.map((factor, idx) => (
-                          <span key={idx} style={styles.factorBadge}>
-                            {factor}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div style={styles.matchRight}>
-                      <div style={{...styles.confidence, color: confidenceColor}}>
-                        {Math.round(similarity.score * 100)}%
-                      </div>
-                      <div style={styles.confidenceLabel}>confidence</div>
-                      
-                      <div style={styles.actionButtons}>
-                        <button
-                          onClick={() => matchHotels(selectedHotel.id, match.id, similarity.score)}
-                          style={styles.acceptButton}
-                          title="Accept Match"
-                        >
-                          <CheckCircle size={20} />
-                        </button>
-                        <button
-                          onClick={() => rejectMatch(selectedHotel.id, match.id)}
-                          style={styles.rejectButton}
-                          title="Reject Match"
-                        >
-                          <XCircle size={20} />
-                        </button>
-                      </div>
-                    </div>
+          {!selectedHotel ? (
+            <div style={styles.emptyState}>
+              <Search size={64} style={styles.emptyIcon} />
+              <p style={styles.emptyText}>Select a supplier hotel to find matches</p>
+              <p style={{fontSize: '12px', color: '#999'}}>Click on any hotel from the left panel</p>
+            </div>
+          ) : (
+            <>
+              <div style={styles.panelHeader}>
+                <h3 style={styles.panelTitle}>Potential Master Hotel Matches</h3>
+                <div style={styles.searchSection}>
+                  <div style={styles.matchingFor}>
+                    Matching for: <span style={styles.matchingHotelName}>{selectedHotel.hotel_name || selectedHotel.name}</span>
+                  </div>
+                  <div style={{fontSize: '12px', color: '#666', marginBottom: '10px'}}>
+                    📍 {selectedHotel.city}, {selectedHotel.country_code || selectedHotel.country}
+                  </div>
+                  <div style={styles.searchBar}>
+                    <input
+                      type="text"
+                      style={styles.searchInput}
+                      placeholder="Custom search in master hotels..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleCustomSearch()}
+                    />
+                    <button 
+                      style={styles.searchButton} 
+                      onClick={handleCustomSearch}
+                      disabled={!searchQuery.trim()}
+                    >
+                      <Search size={16} />
+                    </button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+              <div style={styles.listContainer}>
+                {matchLoading ? (
+                  <div style={styles.loading}>
+                    <RefreshCw size={32} className="spin" />
+                    <p>Finding potential matches...</p>
+                  </div>
+                ) : potentialMatches.length === 0 ? (
+                  <div style={styles.emptyState}>
+                    <AlertCircle size={48} style={styles.emptyIcon} />
+                    <p style={styles.emptyText}>No potential matches found</p>
+                    <p style={{fontSize: '12px', color: '#666', marginBottom: '20px'}}>
+                      Try custom search or mark as no match available
+                    </p>
+                    <button style={styles.noMatchButton} onClick={markAsNoMatch}>
+                      Mark as No Match Available
+                    </button>
+                  </div>
+                ) : (
+                  potentialMatches.map((match, index) => (
+                    <div key={match.id} style={styles.matchCard}>
+                      <div style={styles.matchContent}>
+                        <div style={styles.matchLeft}>
+                          <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px'}}>
+                            <span style={{
+                              background: '#e3f2fd',
+                              color: '#1976d2',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: '600'
+                            }}>
+                              #{index + 1}
+                            </span>
+                            <div style={styles.matchName}>{match.hotel_name || match.name}</div>
+                          </div>
+                          <div style={styles.matchInfo}>
+                            <div style={styles.infoRow}>
+                              <MapPin size={14} />
+                              <span style={styles.infoText}>
+                                {match.city}, {match.country_code || match.country}
+                              </span>
+                            </div>
+                            <div style={styles.infoRow}>
+                              <Building size={14} />
+                              <span style={styles.infoText}>
+                                Code: {match.hotel_id || match.hotel_code}
+                              </span>
+                            </div>
+                          </div>
+                          {match.address_line1 && (
+                            <div style={styles.matchId}>{match.address_line1}</div>
+                          )}
+                          {match.match_reason && (
+                            <div style={styles.factorsContainer}>
+                              <span style={styles.factorBadge}>{match.match_reason}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div style={styles.matchRight}>
+                          {(match.match_score !== undefined || match.confidence !== undefined) && (
+                            <>
+                              <div style={styles.confidence}>
+                                {Math.round((match.match_score || match.confidence / 100) * 100)}%
+                              </div>
+                              <div style={styles.confidenceLabel}>Match</div>
+                            </>
+                          )}
+                          <div style={styles.actionButtons}>
+                            <button
+                              style={styles.acceptButton}
+                              onClick={() => matchHotels(selectedHotel.id, match.id, match.match_score || 1.0)}
+                              title="Accept this match"
+                            >
+                              <CheckCircle size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -752,7 +548,8 @@ const styles = {
     padding: '20px',
     maxWidth: '1600px',
     margin: '0 auto',
-    backgroundColor: '#f5f5f5',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    background: '#f5f5f5',
     minHeight: '100vh'
   },
   header: {
@@ -772,7 +569,8 @@ const styles = {
     color: '#856404',
     padding: '8px 16px',
     borderRadius: '6px',
-    fontSize: '14px'
+    fontSize: '14px',
+    fontWeight: '500'
   },
   errorBanner: {
     background: '#f8d7da',
@@ -782,30 +580,10 @@ const styles = {
     marginBottom: '20px',
     border: '1px solid #f5c6cb'
   },
-  successBanner: {
-    background: '#d4edda',
-    color: '#155724',
-    padding: '12px 20px',
-    borderRadius: '8px',
-    marginBottom: '20px',
-    border: '1px solid #c3e6cb',
-    fontSize: '14px'
-  },
   errorText: {
     marginTop: '8px',
-    fontSize: '14px'
-  },
-  errorHint: {
-    marginTop: '8px',
-    fontSize: '12px',
-    opacity: 0.8
-  },
-  corsFixButton: {
-    marginTop: '15px',
-    padding: '15px',
-    background: 'rgba(255,255,255,0.5)',
-    borderRadius: '6px',
-    fontSize: '13px'
+    fontSize: '14px',
+    margin: '8px 0 0 0'
   },
   statsContainer: {
     display: 'grid',
@@ -820,6 +598,9 @@ const styles = {
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
     borderLeft: '4px solid #2196f3'
   },
+  blueCard: {
+    borderLeftColor: '#2196f3'
+  },
   greenCard: {
     borderLeftColor: '#4caf50'
   },
@@ -832,10 +613,11 @@ const styles = {
   statLabel: {
     fontSize: '12px',
     color: '#666',
-    marginBottom: '8px'
+    marginBottom: '8px',
+    fontWeight: '500'
   },
   statValue: {
-    fontSize: '24px',
+    fontSize: '28px',
     fontWeight: 'bold',
     color: '#333'
   },
@@ -848,11 +630,15 @@ const styles = {
     background: 'white',
     borderRadius: '8px',
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    height: '700px'
   },
   panelHeader: {
     padding: '20px',
-    borderBottom: '1px solid #e0e0e0'
+    borderBottom: '1px solid #e0e0e0',
+    flexShrink: 0
   },
   panelTitle: {
     fontSize: '18px',
@@ -863,20 +649,24 @@ const styles = {
   },
   filters: {
     display: 'flex',
-    gap: '10px'
+    gap: '10px',
+    flexWrap: 'wrap'
   },
   select: {
     border: '1px solid #ddd',
     borderRadius: '4px',
-    padding: '8px',
-    fontSize: '14px'
+    padding: '8px 12px',
+    fontSize: '14px',
+    minWidth: '150px',
+    background: 'white'
   },
   input: {
     border: '1px solid #ddd',
     borderRadius: '4px',
-    padding: '8px',
+    padding: '8px 12px',
     fontSize: '14px',
-    flex: 1
+    flex: 1,
+    minWidth: '150px'
   },
   refreshButton: {
     background: '#2196f3',
@@ -886,14 +676,17 @@ const styles = {
     borderRadius: '4px',
     fontSize: '14px',
     cursor: 'pointer',
-    fontWeight: '500'
+    fontWeight: '500',
+    display: 'flex',
+    alignItems: 'center',
+    whiteSpace: 'nowrap'
   },
   listContainer: {
-    maxHeight: '600px',
+    flex: 1,
     overflowY: 'auto'
   },
   loading: {
-    padding: '40px',
+    padding: '60px 20px',
     textAlign: 'center',
     color: '#666'
   },
@@ -909,7 +702,7 @@ const styles = {
   },
   hotelName: {
     fontWeight: '600',
-    fontSize: '14px',
+    fontSize: '15px',
     color: '#333',
     marginBottom: '8px'
   },
@@ -920,23 +713,25 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    marginTop: '4px'
+    marginTop: '4px',
+    color: '#666'
   },
   infoText: {
-    fontSize: '12px',
+    fontSize: '13px',
     color: '#666'
   },
   hotelId: {
     fontSize: '11px',
-    color: '#999'
+    color: '#999',
+    marginTop: '4px'
   },
   searchSection: {
-    marginBottom: '15px'
+    marginTop: '10px'
   },
   matchingFor: {
     fontSize: '14px',
     color: '#666',
-    marginBottom: '10px'
+    marginBottom: '4px'
   },
   matchingHotelName: {
     fontWeight: '600',
@@ -949,7 +744,7 @@ const styles = {
   searchInput: {
     border: '1px solid #ddd',
     borderRadius: '4px',
-    padding: '8px',
+    padding: '8px 12px',
     fontSize: '14px',
     flex: 1
   },
@@ -961,7 +756,9 @@ const styles = {
     borderRadius: '4px',
     cursor: 'pointer',
     display: 'flex',
-    alignItems: 'center'
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '40px'
   },
   emptyState: {
     padding: '60px 20px',
@@ -970,16 +767,18 @@ const styles = {
   },
   emptyIcon: {
     color: '#ff9800',
-    marginBottom: '10px'
+    marginBottom: '15px'
   },
   emptyText: {
-    marginBottom: '20px'
+    marginBottom: '10px',
+    fontSize: '15px',
+    fontWeight: '500'
   },
   noMatchButton: {
     background: '#f44336',
     color: 'white',
     border: 'none',
-    padding: '10px 20px',
+    padding: '12px 24px',
     borderRadius: '4px',
     fontSize: '14px',
     cursor: 'pointer',
@@ -999,70 +798,84 @@ const styles = {
   },
   matchName: {
     fontWeight: '600',
-    fontSize: '14px',
-    color: '#333',
-    marginBottom: '8px'
+    fontSize: '15px',
+    color: '#333'
   },
   matchInfo: {
+    marginTop: '8px',
     marginBottom: '8px'
   },
   matchId: {
     fontSize: '11px',
     color: '#999',
-    marginBottom: '12px'
+    marginTop: '4px',
+    marginBottom: '8px'
   },
   factorsContainer: {
     display: 'flex',
     flexWrap: 'wrap',
-    gap: '6px'
+    gap: '6px',
+    marginTop: '8px'
   },
   factorBadge: {
     fontSize: '11px',
     background: '#e3f2fd',
     color: '#1976d2',
     padding: '4px 8px',
-    borderRadius: '4px'
+    borderRadius: '4px',
+    fontWeight: '500'
   },
   matchRight: {
     marginLeft: '20px',
     textAlign: 'right',
-    minWidth: '100px'
+    minWidth: '100px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end'
   },
   confidence: {
-    fontSize: '24px',
+    fontSize: '28px',
     fontWeight: 'bold',
-    marginBottom: '4px'
+    marginBottom: '2px',
+    color: '#2196f3'
   },
   confidenceLabel: {
     fontSize: '11px',
     color: '#666',
-    marginBottom: '12px'
+    marginBottom: '12px',
+    fontWeight: '500'
   },
   actionButtons: {
     display: 'flex',
-    gap: '8px',
-    justifyContent: 'flex-end'
+    gap: '8px'
   },
   acceptButton: {
     background: '#4caf50',
     color: 'white',
     border: 'none',
-    padding: '8px',
+    padding: '10px',
     borderRadius: '4px',
     cursor: 'pointer',
     display: 'flex',
-    alignItems: 'center'
-  },
-  rejectButton: {
-    background: '#f44336',
-    color: 'white',
-    border: 'none',
-    padding: '8px',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center'
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '40px'
   }
 };
+
+// Add spinning animation via CSS
+const styleSheet = document.styleSheets[0];
+styleSheet.insertRule(`
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+`, styleSheet.cssRules.length);
+
+styleSheet.insertRule(`
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+`, styleSheet.cssRules.length);
 
 export default HotelMatchingReview;
