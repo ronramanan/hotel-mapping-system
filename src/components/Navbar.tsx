@@ -1,8 +1,29 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 const Navbar: React.FC = () => {
   const navigate = useNavigate();
+  const [unmatchedCount, setUnmatchedCount] = useState<number>(0);
+
+  useEffect(() => {
+    // Fetch unmatched count from your API
+    const fetchUnmatchedCount = async () => {
+      try {
+        // Replace with your actual API endpoint
+        const response = await fetch('/api/hotels/unmatched/count');
+        const data = await response.json();
+        setUnmatchedCount(data.count || 0);
+      } catch (error) {
+        console.error('Failed to fetch unmatched count:', error);
+        setUnmatchedCount(0);
+      }
+    };
+
+    fetchUnmatchedCount();
+    // Optionally refresh every 30 seconds
+    const interval = setInterval(fetchUnmatchedCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated');
@@ -23,8 +44,8 @@ const Navbar: React.FC = () => {
           <Link to="/bulk-import-supplier" className="nav-link">Import Suppliers</Link>
           <Link to="/reviews" className="nav-link">Pending Reviews</Link>
           <Link to="/review" className="nav-link">
-  Review Matches ({unmatchedCount})
-</Link>
+            Review Matches {unmatchedCount > 0 && `(${unmatchedCount})`}
+          </Link>
           <Link to="/export" className="nav-link">Export</Link>
           
           <button onClick={handleLogout} className="logout-button">
