@@ -431,3 +431,32 @@ body {
     padding: 10px;
   }
 }
+
+
+/* Hotel Matching Review Styles */
+.hotel-matching-review {
+  background: #f3f4f6;
+  min-height: 100vh;
+}
+
+.stat-card {
+  transition: transform 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Scrollbar styling */
+.hotel-matching-review ::-webkit-scrollbar {
+  width: 8px;
+}
+
+.hotel-matching-review ::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.hotel-matching-review ::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
