@@ -8,19 +8,18 @@ const HotelMatchingReview = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState({
-    total: 41152,
-    matched: 18797,
-    unmatched: 22355,
-    pendingReview: 0
+    total: 0,
+    matched: 0,
+    unmatched: 0
   });
   const [filters, setFilters] = useState({
     country: '',
     city: '',
     confidence: 'all'
   });
-  const [usingMockData, setUsingMockData] = useState(true);
+  const [usingMockData, setUsingMockData] = useState(false);
 
-  const API_BASE = process.env.REACT_APP_API_URL || '';
+  const API_BASE = process.env.REACT_APP_API_URL || process.env.REACT_APP_API_ENDPOINT || '';
 
   // Mock data for development
   const mockUnmatchedHotels = [
@@ -82,24 +81,40 @@ const HotelMatchingReview = () => {
   // Fetch unmatched hotels
   const fetchUnmatchedHotels = async () => {
     setLoading(true);
+    
+    // Check if API is configured
+    if (!API_BASE) {
+      console.warn('No API endpoint configured. Using mock data.');
+      setUnmatchedHotels(mockUnmatchedHotels);
+      setUsingMockData(true);
+      setLoading(false);
+      return;
+    }
+
     try {
-      if (!API_BASE) {
-        // Use mock data
-        setUnmatchedHotels(mockUnmatchedHotels);
-        setUsingMockData(true);
-      } else {
-        const response = await fetch(`${API_BASE}/unmatched-hotels?limit=50`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(filters)
-        });
-        const data = await response.json();
-        setUnmatchedHotels(data.hotels || []);
-        setStats(prev => ({ ...prev, ...data.stats }));
-        setUsingMockData(false);
+      console.log('Fetching unmatched hotels from API:', `${API_BASE}/unmatched-hotels`);
+      
+      const response = await fetch(`${API_BASE}/unmatched-hotels?limit=50`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(filters)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
       }
+      
+      const data = await response.json();
+      console.log('Received data from API:', data);
+      
+      setUnmatchedHotels(data.hotels || []);
+      if (data.stats) {
+        setStats(prev => ({ ...prev, ...data.stats }));
+      }
+      setUsingMockData(false);
     } catch (error) {
       console.error('Error fetching unmatched hotels:', error);
+      console.warn('Falling back to mock data');
       setUnmatchedHotels(mockUnmatchedHotels);
       setUsingMockData(true);
     }
@@ -109,28 +124,42 @@ const HotelMatchingReview = () => {
   // Search for potential matches
   const searchPotentialMatches = async (supplierHotel) => {
     setLoading(true);
+    
+    // Check if API is configured
+    if (!API_BASE) {
+      console.warn('No API endpoint configured. Using mock matches.');
+      setPotentialMatches(mockMasterHotels);
+      setLoading(false);
+      return;
+    }
+
     try {
-      if (!API_BASE || usingMockData) {
-        // Use mock matches
-        setPotentialMatches(mockMasterHotels);
-      } else {
-        const response = await fetch(`${API_BASE}/potential-matches`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            hotelName: supplierHotel.hotel_name,
-            city: supplierHotel.city,
-            countryCode: supplierHotel.country_code,
-            latitude: supplierHotel.latitude,
-            longitude: supplierHotel.longitude,
-            customSearch: searchQuery
-          })
-        });
-        const data = await response.json();
-        setPotentialMatches(data.matches || []);
+      console.log('Searching potential matches from API:', `${API_BASE}/potential-matches`);
+      
+      const response = await fetch(`${API_BASE}/potential-matches`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hotelName: supplierHotel.hotel_name,
+          city: supplierHotel.city,
+          countryCode: supplierHotel.country_code,
+          latitude: supplierHotel.latitude,
+          longitude: supplierHotel.longitude,
+          customSearch: searchQuery
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
       }
+      
+      const data = await response.json();
+      console.log('Received potential matches:', data);
+      
+      setPotentialMatches(data.matches || []);
     } catch (error) {
       console.error('Error fetching potential matches:', error);
+      console.warn('Falling back to mock matches');
       setPotentialMatches(mockMasterHotels);
     }
     setLoading(false);
@@ -138,12 +167,17 @@ const HotelMatchingReview = () => {
 
   // Reject a match
   const rejectMatch = async (supplierHotelId, masterHotelId) => {
-    try {
-      if (!API_BASE || usingMockData) {
-        alert('Match rejected (Demo mode)');
-        return;
-      }
+    // Check if API is configured
+    if (!API_BASE) {
+      console.warn('No API endpoint configured. Demo mode.');
+      setPotentialMatches(prev => prev.filter(m => m.id !== masterHotelId));
+      alert('Match rejected (Demo mode - no API configured)');
+      return;
+    }
 
+    try {
+      console.log('Rejecting match via API:', `${API_BASE}/reject-match`);
+      
       const response = await fetch(`${API_BASE}/reject-match`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -154,33 +188,40 @@ const HotelMatchingReview = () => {
       });
       
       if (response.ok) {
+        console.log('Match rejected successfully');
         // Remove this match from potential matches list
         setPotentialMatches(prev => prev.filter(m => m.id !== masterHotelId));
         alert('Match rejected');
+      } else {
+        throw new Error(`API returned ${response.status}`);
       }
     } catch (error) {
       console.error('Error rejecting match:', error);
-      alert('Failed to reject match');
+      alert('Failed to reject match. Check console for details.');
     }
   };
 
   // Manual match hotels
   const matchHotels = async (supplierHotelId, masterHotelId, confidence) => {
-    try {
-      if (!API_BASE || usingMockData) {
-        // Simulate success
-        setUnmatchedHotels(prev => prev.filter(h => h.id !== supplierHotelId));
-        setSelectedHotel(null);
-        setPotentialMatches([]);
-        setStats(prev => ({
-          ...prev,
-          matched: prev.matched + 1,
-          unmatched: prev.unmatched - 1
-        }));
-        alert('Hotels matched successfully! (Demo mode)');
-        return;
-      }
+    // Check if API is configured
+    if (!API_BASE) {
+      console.warn('No API endpoint configured. Demo mode.');
+      // Simulate success in demo mode
+      setUnmatchedHotels(prev => prev.filter(h => h.id !== supplierHotelId));
+      setSelectedHotel(null);
+      setPotentialMatches([]);
+      setStats(prev => ({
+        ...prev,
+        matched: prev.matched + 1,
+        unmatched: prev.unmatched - 1
+      }));
+      alert('Hotels matched successfully! (Demo mode - no API configured)');
+      return;
+    }
 
+    try {
+      console.log('Matching hotels via API:', `${API_BASE}/manual-match`);
+      
       const response = await fetch(`${API_BASE}/manual-match`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -193,6 +234,8 @@ const HotelMatchingReview = () => {
       });
       
       if (response.ok) {
+        console.log('Match successful');
+        // Remove from unmatched list
         setUnmatchedHotels(prev => prev.filter(h => h.id !== supplierHotelId));
         setSelectedHotel(null);
         setPotentialMatches([]);
@@ -202,23 +245,29 @@ const HotelMatchingReview = () => {
           unmatched: prev.unmatched - 1
         }));
         alert('Hotels matched successfully!');
+      } else {
+        throw new Error(`API returned ${response.status}`);
       }
     } catch (error) {
       console.error('Error matching hotels:', error);
-      alert('Failed to match hotels');
+      alert('Failed to match hotels. Check console for details.');
     }
   };
 
   // Mark as no match available
   const markAsNoMatch = async (supplierHotelId) => {
-    try {
-      if (!API_BASE || usingMockData) {
-        setUnmatchedHotels(prev => prev.filter(h => h.id !== supplierHotelId));
-        setSelectedHotel(null);
-        alert('Marked as no match available (Demo mode)');
-        return;
-      }
+    // Check if API is configured
+    if (!API_BASE) {
+      console.warn('No API endpoint configured. Demo mode.');
+      setUnmatchedHotels(prev => prev.filter(h => h.id !== supplierHotelId));
+      setSelectedHotel(null);
+      alert('Marked as no match available (Demo mode - no API configured)');
+      return;
+    }
 
+    try {
+      console.log('Marking as no match via API:', `${API_BASE}/mark-no-match`);
+      
       const response = await fetch(`${API_BASE}/mark-no-match`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -226,12 +275,16 @@ const HotelMatchingReview = () => {
       });
       
       if (response.ok) {
+        console.log('Marked as no match successfully');
         setUnmatchedHotels(prev => prev.filter(h => h.id !== supplierHotelId));
         setSelectedHotel(null);
         alert('Marked as no match available');
+      } else {
+        throw new Error(`API returned ${response.status}`);
       }
     } catch (error) {
       console.error('Error marking no match:', error);
+      alert('Failed to mark as no match. Check console for details.');
     }
   };
 
@@ -372,7 +425,7 @@ const HotelMatchingReview = () => {
       {/* Header */}
       <div style={styles.header}>
         <h1 style={styles.title}>Hotel Matching Review</h1>
-        {usingMockData && (
+        {!API_BASE && (
           <div style={styles.demoNotice}>
             ℹ️ Demo Mode - Configure API endpoint for live data
           </div>
