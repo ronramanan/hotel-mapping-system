@@ -22,6 +22,9 @@ const Navbar: React.FC = () => {
           <Link to="/bulk-import-master" className="nav-link">Import Masters</Link>
           <Link to="/bulk-import-supplier" className="nav-link">Import Suppliers</Link>
           <Link to="/reviews" className="nav-link">Pending Reviews</Link>
+          <Link to="/review" className="nav-link">
+  Review Matches ({unmatchedCount})
+</Link>
           <Link to="/export" className="nav-link">Export</Link>
           
           <button onClick={handleLogout} className="logout-button">
