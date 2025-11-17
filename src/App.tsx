@@ -5,7 +5,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
 import Dashboard from './components/Dashboard';
 import BulkImport from './components/BulkImport';
-import PendingReviews from './components/PendingReviews';
 import ExportMappings from './components/ExportMappings';
 import HotelMatchingReview from './components/HotelMatchingReview';
 import './App.css';
@@ -29,10 +28,9 @@ function App() {
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/bulk-import-master" element={<BulkImport type="master" />} />
                     <Route path="/bulk-import-supplier" element={<BulkImport type="supplier" />} />
-                    <Route path="/reviews" element={<PendingReviews />} />
+                    <Route path="/review" element={<HotelMatchingReview />} />
                     <Route path="/export" element={<ExportMappings />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
-                    <Route path="/review" element={<HotelMatchingReview />} />
                   </Routes>
                 </div>
               </div>
