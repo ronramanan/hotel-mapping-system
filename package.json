@@ -1,30 +1,45 @@
 {
-  "name": "hotel-mapping-lambda",
-  "version": "2.0.0",
-  "description": "Hotel Mapping System Lambda Handler with Complete Country Support",
-  "type": "module",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "deploy": "zip -r function.zip . -x '*.git*' 'node_modules/.cache/*' && aws lambda update-function-code --function-name hotel-mapping-api --zip-file fileb://function.zip --region ap-southeast-1",
-    "logs": "aws logs tail /aws/lambda/hotel-mapping-api --follow --region ap-southeast-1"
-  },
-  "keywords": [
-    "hotel",
-    "mapping",
-    "lambda",
-    "aws",
-    "postgresql"
-  ],
-  "author": "Kamoota Group",
-  "license": "MIT",
+  "name": "hotel-mapping-system",
+  "version": "1.0.0",
+  "description": "Hotel mapping system for multi-supplier aggregation",
+  "private": true,
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.515.0",
-    "@aws-sdk/s3-request-presigner": "^3.515.0",
-    "pg": "^8.11.3",
-    "csv-parser": "^3.0.0"
+    "@aws-amplify/ui-react": "^6.0.0",
+    "aws-amplify": "^6.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0",
+    "react-scripts": "5.0.1",
+    "typescript": "^4.9.5",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/node": "^20.10.0",
+    "axios": "^1.6.2",
+    "lucide-react": "^0.263.1",
+    "web-vitals": "^2.1.4"
   },
-  "engines": {
-    "node": ">=18.0.0"
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   }
 }
