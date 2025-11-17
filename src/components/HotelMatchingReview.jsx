@@ -17,7 +17,8 @@ const HotelMatchingReview = () => {
     city: '',
     confidence: 'all'
   });
-  const [usingMockData, setUsingMockData] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('checking'); // checking, connected, failed, no-api
+  const [errorMessage, setErrorMessage] = useState('');
 
   const API_BASE = process.env.REACT_APP_API_URL || process.env.REACT_APP_API_ENDPOINT || '';
 
@@ -81,42 +82,79 @@ const HotelMatchingReview = () => {
   // Fetch unmatched hotels
   const fetchUnmatchedHotels = async () => {
     setLoading(true);
+    setErrorMessage('');
     
     // Check if API is configured
     if (!API_BASE) {
-      console.warn('No API endpoint configured. Using mock data.');
-      setUnmatchedHotels(mockUnmatchedHotels);
-      setUsingMockData(true);
+      console.error('❌ No API endpoint configured!');
+      console.error('Please set REACT_APP_API_ENDPOINT or REACT_APP_API_URL environment variable');
+      setConnectionStatus('no-api');
+      setErrorMessage('No API endpoint configured. Please set environment variables in Amplify.');
       setLoading(false);
       return;
     }
 
+    console.log('🔌 API Configured:', API_BASE);
+    console.log('📡 Fetching unmatched hotels from:', `${API_BASE}/unmatched-hotels`);
+    
     try {
-      console.log('Fetching unmatched hotels from API:', `${API_BASE}/unmatched-hotels`);
+      const url = `${API_BASE}/unmatched-hotels?limit=50`;
+      console.log('🌐 Making request to:', url);
       
-      const response = await fetch(`${API_BASE}/unmatched-hotels?limit=50`, {
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify(filters)
       });
       
+      console.log('📥 Response status:', response.status, response.statusText);
+      
       if (!response.ok) {
-        throw new Error(`API returned ${response.status}`);
+        const errorText = await response.text();
+        console.error('❌ API Error Response:', errorText);
+        throw new Error(`API returned ${response.status}: ${response.statusText}`);
       }
       
       const data = await response.json();
-      console.log('Received data from API:', data);
+      console.log('✅ Successfully received data:', data);
+      console.log('📊 Hotels count:', data.hotels?.length || 0);
+      console.log('📈 Stats:', data.stats);
       
       setUnmatchedHotels(data.hotels || []);
       if (data.stats) {
         setStats(prev => ({ ...prev, ...data.stats }));
       }
-      setUsingMockData(false);
+      setConnectionStatus('connected');
+      
+      if (data.hotels?.length === 0) {
+        setErrorMessage('No unmatched hotels found. All hotels may be already matched.');
+      }
+      
     } catch (error) {
-      console.error('Error fetching unmatched hotels:', error);
-      console.warn('Falling back to mock data');
-      setUnmatchedHotels(mockUnmatchedHotels);
-      setUsingMockData(true);
+      console.error('❌ Error fetching unmatched hotels:', error);
+      console.error('Error details:', error.message);
+      
+      // Check if it's a CORS error
+      if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+        setConnectionStatus('failed');
+        setErrorMessage(`
+          CORS Error: Your API is blocking requests from this domain.
+          
+          API: ${API_BASE}
+          Frontend: ${window.location.origin}
+          
+          Fix: Enable CORS in AWS API Gateway for origin: ${window.location.origin}
+          
+          See FIX_CORS_ERROR.md for detailed instructions.
+        `);
+      } else {
+        setConnectionStatus('failed');
+        setErrorMessage(`Failed to connect to API: ${error.message}`);
+      }
+      setUnmatchedHotels([]);
     }
     setLoading(false);
   };
@@ -124,43 +162,61 @@ const HotelMatchingReview = () => {
   // Search for potential matches
   const searchPotentialMatches = async (supplierHotel) => {
     setLoading(true);
+    setErrorMessage('');
     
     // Check if API is configured
     if (!API_BASE) {
-      console.warn('No API endpoint configured. Using mock matches.');
-      setPotentialMatches(mockMasterHotels);
+      console.error('❌ No API endpoint configured!');
+      setErrorMessage('Cannot search matches - no API endpoint configured');
       setLoading(false);
       return;
     }
 
+    console.log('🔍 Searching potential matches for:', supplierHotel.hotel_name);
+    console.log('📡 API endpoint:', `${API_BASE}/potential-matches`);
+    
     try {
-      console.log('Searching potential matches from API:', `${API_BASE}/potential-matches`);
+      const requestBody = {
+        hotelName: supplierHotel.hotel_name,
+        city: supplierHotel.city,
+        countryCode: supplierHotel.country_code,
+        latitude: supplierHotel.latitude,
+        longitude: supplierHotel.longitude,
+        customSearch: searchQuery
+      };
+      console.log('📤 Request body:', requestBody);
       
       const response = await fetch(`${API_BASE}/potential-matches`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          hotelName: supplierHotel.hotel_name,
-          city: supplierHotel.city,
-          countryCode: supplierHotel.country_code,
-          latitude: supplierHotel.latitude,
-          longitude: supplierHotel.longitude,
-          customSearch: searchQuery
-        })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
       });
       
+      console.log('📥 Response status:', response.status, response.statusText);
+      
       if (!response.ok) {
-        throw new Error(`API returned ${response.status}`);
+        const errorText = await response.text();
+        console.error('❌ API Error Response:', errorText);
+        throw new Error(`API returned ${response.status}: ${response.statusText}`);
       }
       
       const data = await response.json();
-      console.log('Received potential matches:', data);
+      console.log('✅ Received potential matches:', data);
+      console.log('🏨 Matches count:', data.matches?.length || 0);
       
       setPotentialMatches(data.matches || []);
+      
+      if (data.matches?.length === 0) {
+        setErrorMessage('No potential matches found for this hotel.');
+      }
+      
     } catch (error) {
-      console.error('Error fetching potential matches:', error);
-      console.warn('Falling back to mock matches');
-      setPotentialMatches(mockMasterHotels);
+      console.error('❌ Error fetching potential matches:', error);
+      setErrorMessage(`Failed to search matches: ${error.message}`);
+      setPotentialMatches([]);
     }
     setLoading(false);
   };
@@ -205,26 +261,20 @@ const HotelMatchingReview = () => {
   const matchHotels = async (supplierHotelId, masterHotelId, confidence) => {
     // Check if API is configured
     if (!API_BASE) {
-      console.warn('No API endpoint configured. Demo mode.');
-      // Simulate success in demo mode
-      setUnmatchedHotels(prev => prev.filter(h => h.id !== supplierHotelId));
-      setSelectedHotel(null);
-      setPotentialMatches([]);
-      setStats(prev => ({
-        ...prev,
-        matched: prev.matched + 1,
-        unmatched: prev.unmatched - 1
-      }));
-      alert('Hotels matched successfully! (Demo mode - no API configured)');
+      alert('❌ Cannot match hotels - No API endpoint configured!\nPlease set REACT_APP_API_ENDPOINT in Amplify environment variables.');
       return;
     }
 
+    console.log('💾 Matching hotels via API:', `${API_BASE}/manual-match`);
+    console.log('📤 Match data:', { supplierHotelId, masterHotelId, confidence });
+    
     try {
-      console.log('Matching hotels via API:', `${API_BASE}/manual-match`);
-      
       const response = await fetch(`${API_BASE}/manual-match`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           supplierHotelId,
           masterHotelId,
@@ -233,8 +283,10 @@ const HotelMatchingReview = () => {
         })
       });
       
+      console.log('📥 Response status:', response.status, response.statusText);
+      
       if (response.ok) {
-        console.log('Match successful');
+        console.log('✅ Match successful');
         // Remove from unmatched list
         setUnmatchedHotels(prev => prev.filter(h => h.id !== supplierHotelId));
         setSelectedHotel(null);
@@ -244,13 +296,15 @@ const HotelMatchingReview = () => {
           matched: prev.matched + 1,
           unmatched: prev.unmatched - 1
         }));
-        alert('Hotels matched successfully!');
+        alert('✅ Hotels matched successfully!');
       } else {
-        throw new Error(`API returned ${response.status}`);
+        const errorText = await response.text();
+        console.error('❌ API Error:', errorText);
+        throw new Error(`API returned ${response.status}: ${response.statusText}`);
       }
     } catch (error) {
-      console.error('Error matching hotels:', error);
-      alert('Failed to match hotels. Check console for details.');
+      console.error('❌ Error matching hotels:', error);
+      alert(`❌ Failed to match hotels: ${error.message}\n\nCheck browser console (F12) for details.`);
     }
   };
 
@@ -425,12 +479,60 @@ const HotelMatchingReview = () => {
       {/* Header */}
       <div style={styles.header}>
         <h1 style={styles.title}>Hotel Matching Review</h1>
-        {!API_BASE && (
-          <div style={styles.demoNotice}>
-            ℹ️ Demo Mode - Configure API endpoint for live data
-          </div>
-        )}
       </div>
+
+      {/* Connection Status Banner */}
+      {connectionStatus === 'no-api' && (
+        <div style={styles.errorBanner}>
+          <strong>⚠️ No API Configured</strong>
+          <div style={styles.errorText}>
+            Set REACT_APP_API_ENDPOINT in AWS Amplify environment variables
+          </div>
+        </div>
+      )}
+      
+      {connectionStatus === 'failed' && errorMessage && (
+        <div style={styles.errorBanner}>
+          <strong>❌ API Connection Failed</strong>
+          <div style={styles.errorText}>
+            {errorMessage.includes('CORS') ? (
+              <>
+                <strong>CORS Error Detected</strong>
+                <div style={{ marginTop: '10px', whiteSpace: 'pre-wrap' }}>{errorMessage}</div>
+                <div style={styles.corsFixButton}>
+                  <strong>How to Fix:</strong>
+                  <ol style={{ margin: '10px 0', paddingLeft: '20px' }}>
+                    <li>Go to AWS API Gateway Console</li>
+                    <li>Select your API: 511whmi057</li>
+                    <li>Enable CORS for all endpoints</li>
+                    <li>Set origin to: {window.location.origin}</li>
+                    <li>Deploy API to prod stage</li>
+                  </ol>
+                  <a 
+                    href="https://docs.aws.amazon.com/apigateway/latest/developerguide/how-to-cors.html" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ color: '#721c24', textDecoration: 'underline' }}
+                  >
+                    AWS CORS Documentation →
+                  </a>
+                </div>
+              </>
+            ) : (
+              errorMessage
+            )}
+          </div>
+          <div style={styles.errorHint}>
+            Check browser console (F12) for detailed error messages
+          </div>
+        </div>
+      )}
+      
+      {connectionStatus === 'connected' && (
+        <div style={styles.successBanner}>
+          ✅ Connected to live database: {API_BASE}
+        </div>
+      )}
 
       {/* Stats */}
       <div style={styles.statsContainer}>
@@ -671,6 +773,39 @@ const styles = {
     padding: '8px 16px',
     borderRadius: '6px',
     fontSize: '14px'
+  },
+  errorBanner: {
+    background: '#f8d7da',
+    color: '#721c24',
+    padding: '15px 20px',
+    borderRadius: '8px',
+    marginBottom: '20px',
+    border: '1px solid #f5c6cb'
+  },
+  successBanner: {
+    background: '#d4edda',
+    color: '#155724',
+    padding: '12px 20px',
+    borderRadius: '8px',
+    marginBottom: '20px',
+    border: '1px solid #c3e6cb',
+    fontSize: '14px'
+  },
+  errorText: {
+    marginTop: '8px',
+    fontSize: '14px'
+  },
+  errorHint: {
+    marginTop: '8px',
+    fontSize: '12px',
+    opacity: 0.8
+  },
+  corsFixButton: {
+    marginTop: '15px',
+    padding: '15px',
+    background: 'rgba(255,255,255,0.5)',
+    borderRadius: '6px',
+    fontSize: '13px'
   },
   statsContainer: {
     display: 'grid',
