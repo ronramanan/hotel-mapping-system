@@ -7,6 +7,7 @@ import Dashboard from './components/Dashboard';
 import BulkImport from './components/BulkImport';
 import PendingReviews from './components/PendingReviews';
 import ExportMappings from './components/ExportMappings';
+import HotelMatchingReview from './components/HotelMatchingReview';
 import './App.css';
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
                     <Route path="/reviews" element={<PendingReviews />} />
                     <Route path="/export" element={<ExportMappings />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
+                    <Route path="/review" element={<HotelMatchingReview />} />
                   </Routes>
                 </div>
               </div>
