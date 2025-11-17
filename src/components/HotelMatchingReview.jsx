@@ -136,6 +136,34 @@ const HotelMatchingReview = () => {
     setLoading(false);
   };
 
+  // Reject a match
+  const rejectMatch = async (supplierHotelId, masterHotelId) => {
+    try {
+      if (!API_BASE || usingMockData) {
+        alert('Match rejected (Demo mode)');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE}/reject-match`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          supplierHotelId,
+          masterHotelId
+        })
+      });
+      
+      if (response.ok) {
+        // Remove this match from potential matches list
+        setPotentialMatches(prev => prev.filter(m => m.id !== masterHotelId));
+        alert('Match rejected');
+      }
+    } catch (error) {
+      console.error('Error rejecting match:', error);
+      alert('Failed to reject match');
+    }
+  };
+
   // Manual match hotels
   const matchHotels = async (supplierHotelId, masterHotelId, confidence) => {
     try {
@@ -211,6 +239,7 @@ const HotelMatchingReview = () => {
   const calculateSimilarity = (supplier, master) => {
     let score = 0;
     let factors = [];
+    let distance = null;
     
     // Name similarity
     const nameSim = stringSimilarity(supplier.hotel_name, master.hotel_name);
@@ -219,16 +248,22 @@ const HotelMatchingReview = () => {
     
     // Location proximity
     if (supplier.latitude && master.latitude) {
-      const distance = haversineDistance(
+      distance = haversineDistance(
         supplier.latitude, supplier.longitude,
         master.latitude, master.longitude
       );
+      
       if (distance < 0.1) {
         score += 0.3;
-        factors.push('Same location');
+        factors.push(`Distance: ${Math.round(distance * 1000)}m`);
       } else if (distance < 1) {
         score += 0.2;
-        factors.push(`${distance.toFixed(1)}km away`);
+        factors.push(`Distance: ${distance.toFixed(2)}km`);
+      } else if (distance < 5) {
+        score += 0.1;
+        factors.push(`Distance: ${distance.toFixed(2)}km`);
+      } else {
+        factors.push(`Distance: ${distance.toFixed(2)}km`);
       }
     }
     
@@ -247,14 +282,34 @@ const HotelMatchingReview = () => {
       }
     }
     
-    return { score, factors };
+    return { score, factors, distance };
   };
 
-  // String similarity helper
+  // String similarity helper with address normalization
   const stringSimilarity = (str1, str2) => {
     if (!str1 || !str2) return 0;
-    const s1 = str1.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const s2 = str2.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    // Normalize addresses - expand abbreviations
+    const normalizeAddress = (str) => {
+      return str
+        .toLowerCase()
+        .replace(/\bst\b/g, 'street')
+        .replace(/\bave\b/g, 'avenue')
+        .replace(/\brd\b/g, 'road')
+        .replace(/\bdr\b/g, 'drive')
+        .replace(/\bln\b/g, 'lane')
+        .replace(/\bblvd\b/g, 'boulevard')
+        .replace(/\bct\b/g, 'court')
+        .replace(/\bpl\b/g, 'place')
+        .replace(/\bsq\b/g, 'square')
+        .replace(/\bapt\b/g, 'apartment')
+        .replace(/\bste\b/g, 'suite')
+        .replace(/[^a-z0-9]/g, '');
+    };
+    
+    const s1 = normalizeAddress(str1);
+    const s2 = normalizeAddress(str2);
+    
     if (s1 === s2) return 1;
     
     const longer = s1.length > s2.length ? s1 : s2;
@@ -339,10 +394,6 @@ const HotelMatchingReview = () => {
         <div style={{...styles.statCard, ...styles.yellowCard}}>
           <div style={styles.statLabel}>Unmatched</div>
           <div style={styles.statValue}>{stats.unmatched.toLocaleString()}</div>
-        </div>
-        <div style={{...styles.statCard, ...styles.purpleCard}}>
-          <div style={styles.statLabel}>Pending Review</div>
-          <div style={styles.statValue}>{stats.pendingReview.toLocaleString()}</div>
         </div>
       </div>
 
@@ -522,6 +573,7 @@ const HotelMatchingReview = () => {
                           <CheckCircle size={20} />
                         </button>
                         <button
+                          onClick={() => rejectMatch(selectedHotel.id, match.id)}
                           style={styles.rejectButton}
                           title="Reject Match"
                         >

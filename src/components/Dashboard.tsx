@@ -96,11 +96,11 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  const totalMapped = stats.byStatus
+  const totalMapped = (stats.byStatus || [])
     .filter(s => s.mapping_status === 'auto_mapped' || s.mapping_status === 'manually_mapped')
     .reduce((sum, s) => sum + parseInt(s.count.toString()), 0);
-  const totalUnmapped = stats.byStatus.find(s => s.mapping_status === 'unmapped')?.count || 0;
-  const totalSupplierHotels = stats.byStatus.reduce((sum, s) => sum + parseInt(s.count.toString()), 0);
+  const totalUnmapped = (stats.byStatus || []).find(s => s.mapping_status === 'unmapped')?.count || 0;
+  const totalSupplierHotels = (stats.byStatus || []).reduce((sum, s) => sum + parseInt(s.count.toString()), 0);
   const mappingPercentage = totalSupplierHotels > 0 ? Math.round((totalMapped / totalSupplierHotels) * 100) : 0;
 
   return (
@@ -148,8 +148,8 @@ const Dashboard: React.FC = () => {
         <div className="stat-card orange">
           <div className="stat-icon">⏳</div>
           <div className="stat-content">
-            <div className="stat-value">{stats.pendingReviews}</div>
-            <div className="stat-label">Pending Review</div>
+            <div className="stat-value">{totalUnmapped.toLocaleString()}</div>
+            <div className="stat-label">Unmapped</div>
           </div>
         </div>
       </div>
@@ -217,10 +217,10 @@ const Dashboard: React.FC = () => {
             <div className="action-desc">Add supplier hotel records</div>
           </Link>
 
-          <Link to="/reviews" className="action-card">
+          <Link to="/review" className="action-card">
             <div className="action-icon">🔍</div>
-            <div className="action-title">Pending Reviews</div>
-            <div className="action-desc">Review {stats.pendingReviews} hotels</div>
+            <div className="action-title">Review Matches</div>
+            <div className="action-desc">Review and match hotels</div>
           </Link>
 
           <Link to="/export" className="action-card">
