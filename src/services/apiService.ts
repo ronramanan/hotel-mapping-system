@@ -6,7 +6,7 @@ class APIService {
   
   constructor() {
     this.client = axios.create({
-      baseURL: process.env.REACT_APP_API_ENDPOINT || 'http://localhost:3001/api',
+      baseURL: process.env.REACT_APP_API_ENDPOINT || 'https://fv3w4p2voqjvnsk2h6m4ddkgr40htlrt.lambda-url.ap-southeast-1.on.aws',
       headers: {
         'Content-Type': 'application/json',
       },
