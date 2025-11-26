@@ -229,7 +229,7 @@ const ImprovedMappingReview: React.FC = () => {
               <div>
                 <p className="text-gray-600 font-semibold mb-1">Coordinates</p>
                 <p className="text-gray-900 font-mono text-xs">
-                  {supplierHotel.latitude?.toFixed(6)}, {supplierHotel.longitude?.toFixed(6)}
+                  {supplierHotel.latitude ? Number(supplierHotel.latitude).toFixed(6) : 'N/A'}, {supplierHotel.longitude ? Number(supplierHotel.longitude).toFixed(6) : 'N/A'}
                 </p>
               </div>
               
@@ -326,7 +326,7 @@ const ImprovedMappingReview: React.FC = () => {
                     <div>
                       <p className="text-gray-600 font-semibold mb-1">Coordinates</p>
                       <p className="text-gray-900 font-mono text-xs">
-                        {master.latitude?.toFixed(6)}, {master.longitude?.toFixed(6)}
+                        {master.latitude ? Number(master.latitude).toFixed(6) : 'N/A'}, {master.longitude ? Number(master.longitude).toFixed(6) : 'N/A'}
                       </p>
                     </div>
                     
