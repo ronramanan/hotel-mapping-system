@@ -275,7 +275,7 @@ const ImprovedMappingReview: React.FC = () => {
             </h3>
             
             {potentialMatches.map((master: MasterHotel, index: number) => {
-              const distance = supplierHotel.latitude && master.latitude
+              const distance = supplierHotel.latitude && supplierHotel.longitude && master.latitude && master.longitude
                 ? calculateDistance(
                     supplierHotel.latitude,
                     supplierHotel.longitude,
