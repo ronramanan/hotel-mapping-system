@@ -1,6 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Check, X, AlertCircle, MapPin, Navigation } from 'lucide-react';
-import apiService from '../services/apiService';
+import axios from 'axios';
+
+const API_BASE_URL = process.env.REACT_APP_API_ENDPOINT || 'https://fv3w4p2voqjvnsk2h6m4ddkgr40htlrt.lambda-url.ap-southeast-1.on.aws';
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
 const ImprovedMappingReview = () => {
   const [hotels, setHotels] = useState([]);
@@ -27,7 +36,7 @@ const ImprovedMappingReview = () => {
   const loadUnmatchedHotels = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getUnmatchedHotels({
+      const response = await apiClient.post('/unmatched-hotels', {
         filters: {
           ...filters,
           limit: 100
@@ -44,7 +53,9 @@ const ImprovedMappingReview = () => {
 
   const loadPotentialMatches = async (supplierHotelId) => {
     try {
-      const response = await apiService.getPotentialMatches(supplierHotelId);
+      const response = await apiClient.post('/potential-matches', {
+        supplierHotelId
+      });
       setSupplierHotel(response.data.supplierHotel);
       setPotentialMatches(response.data.potentialMatches || []);
     } catch (error) {
@@ -56,7 +67,10 @@ const ImprovedMappingReview = () => {
 
   const handleConfirmMatch = async (masterHotelId) => {
     try {
-      await apiService.confirmMatch(supplierHotel.id, masterHotelId);
+      await apiClient.post('/confirm-match', {
+        supplierHotelId: supplierHotel.id,
+        masterHotelId
+      });
       // Move to next hotel
       if (currentIndex < hotels.length - 1) {
         setCurrentIndex(currentIndex + 1);
@@ -71,7 +85,10 @@ const ImprovedMappingReview = () => {
 
   const handleRejectMatch = async (masterHotelId) => {
     try {
-      await apiService.rejectMatch(supplierHotel.id, masterHotelId);
+      await apiClient.post('/reject-match', {
+        supplierHotelId: supplierHotel.id,
+        masterHotelId
+      });
       // Remove from potential matches
       setPotentialMatches(potentialMatches.filter(m => m.id !== masterHotelId));
     } catch (error) {
@@ -81,7 +98,9 @@ const ImprovedMappingReview = () => {
 
   const handleMarkNoMatch = async () => {
     try {
-      await apiService.markNoMatch(supplierHotel.id);
+      await apiClient.post('/mark-no-match', {
+        supplierHotelId: supplierHotel.id
+      });
       // Move to next hotel
       if (currentIndex < hotels.length - 1) {
         setCurrentIndex(currentIndex + 1);
