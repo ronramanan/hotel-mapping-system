@@ -45,6 +45,9 @@ const ImprovedMappingReview: React.FC = () => {
   const [supplierHotel, setSupplierHotel] = useState<Hotel | null>(null);
   const [potentialMatches, setPotentialMatches] = useState<MasterHotel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [totalHotels, setTotalHotels] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const PAGE_SIZE = 10; // Load only 10 hotels at a time
   const [filters, setFilters] = useState<Filters>({
     supplier: '',
     country: '',
@@ -53,7 +56,7 @@ const ImprovedMappingReview: React.FC = () => {
 
   useEffect(() => {
     loadUnmatchedHotels();
-  }, [filters]);
+  }, [filters, currentPage]);
 
   useEffect(() => {
     if (hotels.length > 0 && currentIndex < hotels.length) {
@@ -67,13 +70,19 @@ const ImprovedMappingReview: React.FC = () => {
       const response = await apiClient.post('/unmatched-hotels', {
         filters: {
           ...filters,
-          limit: 100
+          limit: PAGE_SIZE,
+          offset: (currentPage - 1) * PAGE_SIZE
         }
       });
-      setHotels(response.data.hotels || []);
+      
+      const data = response.data;
+      setHotels(data.hotels || []);
+      setTotalHotels(data.total || 0);
       setCurrentIndex(0);
     } catch (error) {
       console.error('Error loading hotels:', error);
+      setHotels([]);
+      setTotalHotels(0);
     } finally {
       setLoading(false);
     }
@@ -158,7 +167,13 @@ const ImprovedMappingReview: React.FC = () => {
     if (currentIndex < hotels.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      setCurrentIndex(0); // Loop back
+      // Load next page
+      if (currentPage * PAGE_SIZE < totalHotels) {
+        setCurrentPage(currentPage + 1);
+      } else {
+        // Loop back to first page
+        setCurrentPage(1);
+      }
     }
   };
 
@@ -178,7 +193,20 @@ const ImprovedMappingReview: React.FC = () => {
   }
 
   if (!supplierHotel) {
-    return <div className="p-8 text-center">No hotels to review</div>;
+    return (
+      <div className="p-8 text-center">
+        <div className="max-w-2xl mx-auto">
+          <AlertCircle className="mx-auto mb-4 text-gray-400" size={64} />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">No Hotels to Review</h2>
+          <p className="text-gray-600 mb-4">
+            All hotels have been processed! You can check the dashboard for statistics.
+          </p>
+          <p className="text-sm text-gray-500">
+            Total hotels in system: {totalHotels}
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -189,7 +217,7 @@ const ImprovedMappingReview: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Hotel Mapping Review</h1>
             <p className="text-sm text-gray-600 mt-1">
-              Reviewing {currentIndex + 1} of {hotels.length} hotels
+              Reviewing hotel {((currentPage - 1) * PAGE_SIZE) + currentIndex + 1} of {totalHotels} total
               {potentialMatches.length > 0 && ` • ${potentialMatches.length} potential matches found`}
             </p>
           </div>
@@ -394,12 +422,12 @@ const ImprovedMappingReview: React.FC = () => {
         <div className="bg-white rounded-lg shadow p-4">
           <div className="flex justify-between text-sm text-gray-600 mb-2">
             <span>Progress</span>
-            <span>{currentIndex + 1} / {hotels.length}</span>
+            <span>{((currentPage - 1) * PAGE_SIZE) + currentIndex + 1} / {totalHotels} • Page {currentPage} of {Math.ceil(totalHotels / PAGE_SIZE)}</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div
               className="bg-blue-600 h-2 rounded-full transition-all"
-              style={{ width: `${((currentIndex + 1) / hotels.length) * 100}%` }}
+              style={{ width: `${((((currentPage - 1) * PAGE_SIZE) + currentIndex + 1) / totalHotels) * 100}%` }}
             />
           </div>
         </div>
@@ -408,4 +436,4 @@ const ImprovedMappingReview: React.FC = () => {
   );
 };
 
-export default ImprovedMappingReview; 
+export default ImprovedMappingReview;
