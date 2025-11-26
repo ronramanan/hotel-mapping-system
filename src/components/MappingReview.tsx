@@ -11,13 +11,41 @@ const apiClient = axios.create({
   },
 });
 
-const ImprovedMappingReview = () => {
-  const [hotels, setHotels] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [supplierHotel, setSupplierHotel] = useState(null);
-  const [potentialMatches, setPotentialMatches] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
+interface Hotel {
+  id: number;
+  supplier_code?: string;
+  supplier_hotel_id?: string;
+  hotel_name: string;
+  address_line1?: string;
+  city?: string;
+  country_code?: string;
+  postal_code?: string;
+  latitude?: number;
+  longitude?: number;
+  phone_number?: string;
+}
+
+interface MasterHotel extends Hotel {
+  match_score?: number;
+  name_score?: number;
+  address_score?: number;
+  distance_score?: number;
+  match_criteria?: any;
+}
+
+interface Filters {
+  supplier: string;
+  country: string;
+  city: string;
+}
+
+const ImprovedMappingReview: React.FC = () => {
+  const [hotels, setHotels] = useState<Hotel[]>([]);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [supplierHotel, setSupplierHotel] = useState<Hotel | null>(null);
+  const [potentialMatches, setPotentialMatches] = useState<MasterHotel[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [filters, setFilters] = useState<Filters>({
     supplier: '',
     country: '',
     city: ''
@@ -51,7 +79,7 @@ const ImprovedMappingReview = () => {
     }
   };
 
-  const loadPotentialMatches = async (supplierHotelId) => {
+  const loadPotentialMatches = async (supplierHotelId: number) => {
     try {
       const response = await apiClient.post('/potential-matches', {
         supplierHotelId
@@ -65,7 +93,7 @@ const ImprovedMappingReview = () => {
     }
   };
 
-  const handleConfirmMatch = async (masterHotelId) => {
+  const handleConfirmMatch = async (masterHotelId: number) => {
     try {
       await apiClient.post('/confirm-match', {
         supplierHotelId: supplierHotel.id,
@@ -83,7 +111,7 @@ const ImprovedMappingReview = () => {
     }
   };
 
-  const handleRejectMatch = async (masterHotelId) => {
+  const handleRejectMatch = async (masterHotelId: number) => {
     try {
       await apiClient.post('/reject-match', {
         supplierHotelId: supplierHotel.id,
@@ -120,7 +148,7 @@ const ImprovedMappingReview = () => {
     }
   };
 
-  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): string => {
     const R = 6371; // Earth's radius in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -243,7 +271,7 @@ const ImprovedMappingReview = () => {
               Potential Master Hotel Matches ({potentialMatches.length})
             </h3>
             
-            {potentialMatches.map((master, index) => {
+            {potentialMatches.map((master: MasterHotel, index: number) => {
               const distance = supplierHotel.latitude && master.latitude
                 ? calculateDistance(
                     supplierHotel.latitude,
