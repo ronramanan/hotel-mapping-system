@@ -94,6 +94,7 @@ const ImprovedMappingReview: React.FC = () => {
   };
 
   const handleConfirmMatch = async (masterHotelId: number) => {
+    if (!supplierHotel) return;
     try {
       await apiClient.post('/confirm-match', {
         supplierHotelId: supplierHotel.id,
@@ -112,6 +113,7 @@ const ImprovedMappingReview: React.FC = () => {
   };
 
   const handleRejectMatch = async (masterHotelId: number) => {
+    if (!supplierHotel) return;
     try {
       await apiClient.post('/reject-match', {
         supplierHotelId: supplierHotel.id,
@@ -125,6 +127,7 @@ const ImprovedMappingReview: React.FC = () => {
   };
 
   const handleMarkNoMatch = async () => {
+    if (!supplierHotel) return;
     try {
       await apiClient.post('/mark-no-match', {
         supplierHotelId: supplierHotel.id
