@@ -82,10 +82,21 @@ const ImprovedMappingReview: React.FC = () => {
   const loadPotentialMatches = async (supplierHotelId: number) => {
     try {
       const response = await apiClient.post('/potential-matches', {
-        supplierHotelId
+        supplierHotelId,
+        limit: 20, // Only show top 20 matches
+        sortBy: 'distance' // Sort by distance
       });
       setSupplierHotel(response.data.supplierHotel);
-      setPotentialMatches(response.data.potentialMatches || []);
+      
+      // Sort matches by distance (closest first)
+      const matches = (response.data.potentialMatches || []).sort((a: MasterHotel, b: MasterHotel) => {
+        const distA = a.match_criteria?.distance_km || 999;
+        const distB = b.match_criteria?.distance_km || 999;
+        return distA - distB;
+      });
+      
+      // Take only top 20
+      setPotentialMatches(matches.slice(0, 20));
     } catch (error) {
       console.error('Error loading matches:', error);
       setSupplierHotel(hotels[currentIndex]);
@@ -275,14 +286,16 @@ const ImprovedMappingReview: React.FC = () => {
             </h3>
             
             {potentialMatches.map((master: MasterHotel, index: number) => {
-              const distance = supplierHotel.latitude && supplierHotel.longitude && master.latitude && master.longitude
-                ? calculateDistance(
-                    supplierHotel.latitude,
-                    supplierHotel.longitude,
-                    master.latitude,
-                    master.longitude
-                  )
+              // Get distance from match_criteria (already calculated in database)
+              const distanceKm = master.match_criteria?.distance_km;
+              const distanceMeters = distanceKm ? (distanceKm * 1000).toFixed(0) : null;
+              const distanceDisplay = distanceKm 
+                ? distanceKm < 1 
+                  ? `${distanceMeters}m` 
+                  : `${distanceKm.toFixed(2)}km`
                 : null;
+              
+              const nameMatch = master.match_criteria?.name_match;
 
               return (
                 <div
@@ -294,15 +307,20 @@ const ImprovedMappingReview: React.FC = () => {
                       <div className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
                         MASTER HOTEL #{index + 1}
                       </div>
-                      {distance && (
+                      {distanceDisplay && (
                         <div className="flex items-center gap-1 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
                           <Navigation size={14} />
-                          {distance}m away
+                          {distanceDisplay} away
+                        </div>
+                      )}
+                      {nameMatch && nameMatch !== 'different' && (
+                        <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold">
+                          {nameMatch === 'exact' ? '✓ Exact Name' : '≈ Similar Name'}
                         </div>
                       )}
                       {master.match_score && (
                         <div className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">
-                          {(master.match_score * 100).toFixed(0)}% confidence
+                          {(master.match_score * 100).toFixed(0)}% match
                         </div>
                       )}
                     </div>
